@@ -1,0 +1,22 @@
+# Task List
+- [x] Research specific installation commands for Gemini CLI and OpenClaw.
+- [x] Create comprehensive setup guide document (`openclaw_windows_setup.md`).
+- [x] Include Windows 24/7 power settings.
+- [x] Include OpenSSH server setup on Windows 11.
+- [x] Include Gemini CLI installation steps.
+- [x] Include OpenClaw installation steps with the most capable option (WSL2/Docker).
+- [x] Add beginner-friendly explanations and restructuring for general audience.
+- [x] Add security best practices (e.g., SSH key authentication, local port binding).
+- [x] Add manual Telegram and Gemini integration steps for OpenClaw.
+- [x] Add a simple end-to-end use case test with Telegram.
+- [x] Rewrite `openclaw_windows_setup.md` for "Automation First" flow.
+- [x] Create `windows_automation_instructions.md` for Gemini CLI.
+- [x] Create `wsl_automation_instructions.md` for Gemini CLI.
+- [x] Replaced broken Gemini CLI automation in Linux with direct script execution.
+- [x] Hardened OpenSSH against password authentication.
+- [x] Hardened WSL 2 by disabling Windows drive automounting.
+- [x] Sandboxed OpenClaw entirely inside a dedicated Docker container.
+- [x] Set hardware resource limits for WSL in Windows `.wslconfig`.
+- [x] Dropped Docker root privileges for OpenClaw.
+- [x] Prevented Docker privilege escalation via `--security-opt no-new-privileges:true`.
+- [x] Isolated OpenClaw onto the Docker bridge network to restrict host network access.
