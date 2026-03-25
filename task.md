@@ -12,7 +12,12 @@
 - [x] Rewrite `openclaw_windows_setup.md` for "Automation First" flow.
 - [x] Create `windows_automation_instructions.md` for Gemini CLI.
 - [x] Create `wsl_automation_instructions.md` for Gemini CLI.
-- [x] Replaced broken Gemini CLI automation in Linux with direct script execution.
+- [x] Restored Gemini CLI automation in Linux (added explicit Node.js/CLI bootstrap steps).
+- [x] Refactored plugin installation to be a manual step for better stability.
+- [x] Added `sudo service docker start` to handle WSL service persistence issues.
+- [x] Fully automated the `openclaw` bash alias inside the setup script.
+- [x] Create dedicated security reference guide (`openclaw_security_reference.md`).
+- [x] Documented rejection of Docker Desktop to preserve WSL air-gap.
 - [x] Hardened OpenSSH against password authentication.
 - [x] Hardened WSL 2 by disabling Windows drive automounting.
 - [x] Sandboxed OpenClaw entirely inside a dedicated Docker container.
