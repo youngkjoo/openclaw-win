@@ -25,3 +25,4 @@
 - [x] Dropped Docker root privileges for OpenClaw.
 - [x] Prevented Docker privilege escalation via `--security-opt no-new-privileges:true`.
 - [x] Isolated OpenClaw onto the Docker bridge network to restrict host network access.
+- [x] Created agent onboarding guide (`agent_onboarding.md`) with Google account, Drive/Gmail/Calendar integration, and security boundaries.
