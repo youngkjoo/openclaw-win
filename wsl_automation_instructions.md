@@ -60,7 +60,7 @@ docker run -d \
 *(This final step creates a permanent `oc` shortcut that properly passes all your arguments through to the container!)*
 ```bash
 cat >> ~/.bashrc << 'EOF'
-oc() { docker exec -it openclaw-sandbox bash -c "export PATH=/home/node/.npm-global/bin:\$PATH && openclaw \$*"; }
+oc() { docker exec -it openclaw-sandbox bash -c "export PATH=/home/node/.npm-global/bin:\$PATH && openclaw $*"; }
 EOF
 ```
 
