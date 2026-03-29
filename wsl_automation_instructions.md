@@ -56,6 +56,12 @@ docker run -d \
   bash -c "mkdir -p /home/node/.npm-global && npm config set prefix '/home/node/.npm-global' && export PATH=/home/node/.npm-global/bin:\$PATH && npm install -g openclaw && (openclaw gateway || sleep infinity)"
 ```
 
+> **Known Issue — npm ENOTEMPTY on restart:** The container runs `npm install -g openclaw` on every boot. If a previous boot was interrupted, a stale temp directory can cause repeated `ENOTEMPTY` errors and the container will restart in a loop. Fix by exec'ing into the container and removing the stale directory:
+> ```bash
+> docker exec openclaw-sandbox rm -rf /home/node/.npm-global/lib/node_modules/.openclaw-*
+> docker restart openclaw-sandbox
+> ```
+
 4. **Create a Shortcut (Bash Function) for Easier Access:**
 *(This final step creates a permanent `oc` shortcut that properly passes all your arguments through to the container!)*
 ```bash
@@ -63,6 +69,17 @@ cat >> ~/.bashrc << 'EOF'
 oc() { docker exec -it openclaw-sandbox bash -c "export PATH=/home/node/.npm-global/bin:\$PATH && openclaw $*"; }
 EOF
 ```
+
+5. **Post-Setup: Verify API Key Consistency:**
+After running `oc setup` or `oc configure`, the runtime creates `~/.openclaw/agents/main/agent/auth-profiles.json` with its own copy of your API key. Verify both files have the same key:
+```bash
+# Check config.json key
+grep apiKey ~/.openclaw/config.json
+
+# Check runtime auth-profiles key
+docker exec openclaw-sandbox cat /home/node/.openclaw/agents/main/agent/auth-profiles.json | grep key
+```
+If these diverge, the agent will fail with `API_KEY_INVALID` (400) errors. See `openclaw-setup-guide.md` for detailed troubleshooting.
 
 **Completion Message:** 
 Once everything succeeds, reboot the WSL instance immediately to permanently sever the Windows drive bridge. Type `exit` to leave your SSH session. Then, on your Windows laptop natively, run `wsl --shutdown` in PowerShell. You are safely sandboxed! (After rebooting, you can just type `oc setup` to start configuring).

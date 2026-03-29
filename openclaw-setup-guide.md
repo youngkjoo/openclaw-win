@@ -32,7 +32,21 @@ A living document of gotchas, configuration tips, and lessons learned from debug
 - If you only want to use one model, remove the `fallbacks` array from `agents.defaults.model` in `openclaw.json`.
 - Leftover fallback entries cause the agent to cycle through models on failure, potentially hitting rate limits on multiple providers.
 
-### Recommended: Clean single-model config
+### Adding a fallback model (e.g., Anthropic)
+To add a second provider as a fallback, **three files** must be updated consistently:
+
+1. **`openclaw.json`** — Add the fallback model and auth profile:
+   - Add the model to `agents.defaults.model.fallbacks`
+   - Add a model entry in `agents.defaults.models`
+   - Add an auth profile in `auth.profiles`
+
+2. **`auth-profiles.json`** — Add the API key for the new provider:
+   - Add a new entry in `profiles` with the API key
+   - Add the provider to `lastGood`
+
+3. **Restart the container** with `docker stop && docker start` (not just `restart`) to ensure clean state.
+
+### Recommended: Single-model config
 ```json
 {
   "agents": {
@@ -54,6 +68,63 @@ A living document of gotchas, configuration tips, and lessons learned from debug
         "mode": "api_key"
       }
     }
+  }
+}
+```
+
+### Recommended: Primary + fallback config
+```json
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "google/gemini-3.1-pro-preview",
+        "fallbacks": [
+          "anthropic/claude-opus-4-6"
+        ]
+      },
+      "models": {
+        "google/gemini-3.1-pro-preview": {
+          "alias": "pro"
+        },
+        "anthropic/claude-opus-4-6": {
+          "alias": "opus"
+        }
+      }
+    }
+  },
+  "auth": {
+    "profiles": {
+      "google:default": {
+        "provider": "google",
+        "mode": "api_key"
+      },
+      "anthropic:default": {
+        "provider": "anthropic",
+        "mode": "api_key"
+      }
+    }
+  }
+}
+```
+The corresponding `auth-profiles.json` must have API keys for both providers:
+```json
+{
+  "profiles": {
+    "google:default": {
+      "type": "api_key",
+      "provider": "google",
+      "key": "YOUR_GEMINI_API_KEY"
+    },
+    "anthropic:default": {
+      "type": "api_key",
+      "provider": "anthropic",
+      "key": "YOUR_ANTHROPIC_API_KEY"
+    }
+  },
+  "lastGood": {
+    "google": "google:default",
+    "anthropic": "anthropic:default"
   }
 }
 ```
@@ -135,6 +206,25 @@ docker exec openclaw-sandbox npx openclaw cron run <job-uuid>
 - Auth profile changes require a full gateway restart (the container handles this via SIGUSR1).
 - When in doubt, do a full `docker stop && docker start`.
 
+### Gotcha: npm ENOTEMPTY error on container restart
+- **Symptom:** Container enters a restart loop with repeated errors:
+  ```
+  npm error ENOTEMPTY: directory not empty, rename '.../openclaw' -> '.../openclaw-75dMYDV8'
+  ```
+- **Cause:** The container entrypoint runs `npm install -g openclaw` on every boot. If a previous boot was interrupted (e.g., `docker restart` during install), npm leaves a stale temp directory that blocks future installs.
+- **Fix:**
+  ```bash
+  # Stop the restart loop
+  docker update --restart=no openclaw-sandbox
+  # Wait for it to start briefly, then clean stale dirs
+  docker start openclaw-sandbox
+  sleep 3
+  docker exec openclaw-sandbox rm -rf /home/node/.npm-global/lib/node_modules/.openclaw-*
+  # Restore restart policy and restart
+  docker update --restart=unless-stopped openclaw-sandbox
+  docker restart openclaw-sandbox
+  ```
+
 ---
 
 ## 4. Quick Checklist for New OpenClaw Setup
@@ -142,10 +232,12 @@ docker exec openclaw-sandbox npx openclaw cron run <job-uuid>
 - [ ] Set API key consistently in `config.json` and `auth-profiles.json`
 - [ ] Remove any unused auth profiles (OAuth, old API keys) from both `openclaw.json` and `auth-profiles.json`
 - [ ] Configure a single primary model without fallbacks (unless you intentionally want failover)
+- [ ] If adding a fallback model, update all three files: `openclaw.json`, `auth-profiles.json`, and optionally `config.json`
 - [ ] Verify `auth-profiles.json` has no stale `usageStats` with error counts or failure timestamps
 - [ ] After creating cron jobs, verify they have `sessionTarget: "isolated"` with Telegram delivery — or create them by asking the agent directly via Telegram
 - [ ] Test a cron job manually with `npx openclaw cron run <job-uuid>` and confirm delivery arrives on Telegram
 - [ ] Use `docker stop && docker start` (not just restart) after any auth-related config changes
+- [ ] If container enters a restart loop with `ENOTEMPTY` errors, clean stale npm temp dirs (see Section 3)
 
 ---
 
