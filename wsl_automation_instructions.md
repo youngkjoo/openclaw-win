@@ -81,5 +81,20 @@ docker exec openclaw-sandbox cat /home/node/.openclaw/agents/main/agent/auth-pro
 ```
 If these diverge, the agent will fail with `API_KEY_INVALID` (400) errors. See `openclaw-setup-guide.md` for detailed troubleshooting.
 
-**Completion Message:** 
+6. **Auto-Start Docker on WSL Boot:**
+Docker does **not** auto-start on WSL2. If Windows sleeps, hibernates, reboots, or if `wsl --shutdown` is run, Docker will be stopped when WSL comes back — and OpenClaw will be down until Docker is manually restarted. Add this to your `.bashrc` to auto-start Docker on every WSL session:
+```bash
+cat >> ~/.bashrc << 'AUTOSTART'
+# Auto-start Docker daemon if not running
+if ! pgrep -x dockerd > /dev/null 2>&1; then
+  sudo service docker start > /dev/null 2>&1
+fi
+AUTOSTART
+```
+> **Note:** This requires passwordless sudo for the `docker` service. To set that up:
+> ```bash
+> echo "$USER ALL=(ALL) NOPASSWD: /usr/sbin/service docker *" | sudo tee /etc/sudoers.d/docker-service
+> ```
+
+**Completion Message:**
 Once everything succeeds, reboot the WSL instance immediately to permanently sever the Windows drive bridge. Type `exit` to leave your SSH session. Then, on your Windows laptop natively, run `wsl --shutdown` in PowerShell. You are safely sandboxed! (After rebooting, you can just type `oc setup` to start configuring).

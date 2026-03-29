@@ -225,6 +225,13 @@ docker exec openclaw-sandbox npx openclaw cron run <job-uuid>
   docker restart openclaw-sandbox
   ```
 
+### Gotcha: Docker does not auto-start on WSL2
+- WSL2 does not run systemd by default, so Docker won't start automatically after Windows sleeps, hibernates, reboots, or after `wsl --shutdown`.
+- **Symptom:** `docker ps` or `oc status` fails with `Cannot connect to the Docker daemon` or `No such file or directory` for `/var/run/docker.sock`.
+- **Cause:** The Docker daemon simply isn't running. The WSL instance came up fresh without starting services.
+- **Fix:** Run `sudo service docker start`. The container will auto-start if its restart policy is `unless-stopped`.
+- **Prevention:** Add Docker auto-start to `~/.bashrc` and configure passwordless sudo for the docker service (see `wsl_automation_instructions.md` step 6).
+
 ---
 
 ## 4. Quick Checklist for New OpenClaw Setup
@@ -238,7 +245,8 @@ docker exec openclaw-sandbox npx openclaw cron run <job-uuid>
 - [ ] Test a cron job manually with `npx openclaw cron run <job-uuid>` and confirm delivery arrives on Telegram
 - [ ] Use `docker stop && docker start` (not just restart) after any auth-related config changes
 - [ ] If container enters a restart loop with `ENOTEMPTY` errors, clean stale npm temp dirs (see Section 3)
+- [ ] Set up Docker auto-start on WSL boot (see Section 3 and `wsl_automation_instructions.md` step 6)
 
 ---
 
-*Last updated: 2026-03-28*
+*Last updated: 2026-03-29*
