@@ -96,5 +96,22 @@ AUTOSTART
 > echo "$USER ALL=(ALL) NOPASSWD: /usr/sbin/service docker *" | sudo tee /etc/sudoers.d/docker-service
 > ```
 
+7. **Prevent WSL Idle Shutdown (Windows Task Scheduler):**
+WSL2 automatically shuts down when there are no active sessions (all terminals closed). This kills Docker and OpenClaw. To keep WSL alive 24/7, create a Windows Scheduled Task that pings WSL every 2 minutes.
+
+Run this in **PowerShell as Administrator**:
+```powershell
+$action = New-ScheduledTaskAction -Execute "wsl.exe" -Argument "-e /bin/true"; $trigger1 = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 2) -RepetitionDuration (New-TimeSpan -Days 9999); $trigger2 = New-ScheduledTaskTrigger -AtStartup; $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 1); Register-ScheduledTask -TaskName "KeepWSLAlive" -Action $action -Trigger @($trigger1, $trigger2) -Settings $settings -Description "Pings WSL every 2 minutes to prevent idle shutdown"
+```
+
+Verify it's registered:
+```powershell
+Get-ScheduledTask -TaskName "KeepWSLAlive" | Select-Object State, TaskName
+```
+
+> **How it works:** The task runs `wsl -e /bin/true` every 2 minutes, which is a no-op that keeps WSL awake. Combined with the `.bashrc` Docker auto-start (step 6), the chain is: Task Scheduler wakes WSL → `.bashrc` starts Docker → Docker starts the OpenClaw container.
+
+> **To remove later:** `Unregister-ScheduledTask -TaskName "KeepWSLAlive" -Confirm:$false`
+
 **Completion Message:**
 Once everything succeeds, reboot the WSL instance immediately to permanently sever the Windows drive bridge. Type `exit` to leave your SSH session. Then, on your Windows laptop natively, run `wsl --shutdown` in PowerShell. You are safely sandboxed! (After rebooting, you can just type `oc setup` to start configuring).

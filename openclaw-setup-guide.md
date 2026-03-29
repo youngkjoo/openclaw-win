@@ -232,6 +232,12 @@ docker exec openclaw-sandbox npx openclaw cron run <job-uuid>
 - **Fix:** Run `sudo service docker start`. The container will auto-start if its restart policy is `unless-stopped`.
 - **Prevention:** Add Docker auto-start to `~/.bashrc` and configure passwordless sudo for the docker service (see `wsl_automation_instructions.md` step 6).
 
+### Gotcha: WSL2 shuts down when all terminals are closed
+- **Symptom:** OpenClaw stops responding on Telegram after you close all WSL/SSH sessions. It resumes when you open a new terminal.
+- **Cause:** WSL2 automatically idles and shuts down when there are no active sessions, killing Docker and the OpenClaw container.
+- **Fix:** Create a Windows Scheduled Task that pings WSL every 2 minutes with `wsl -e /bin/true` to keep it alive. This works on battery, survives sleep/hibernate, and triggers at startup. See `wsl_automation_instructions.md` step 7 for the PowerShell command.
+- **How the chain works:** Task Scheduler wakes WSL → `.bashrc` starts Docker → Docker auto-starts the OpenClaw container (restart policy: `unless-stopped`).
+
 ---
 
 ## 4. Quick Checklist for New OpenClaw Setup
@@ -246,6 +252,7 @@ docker exec openclaw-sandbox npx openclaw cron run <job-uuid>
 - [ ] Use `docker stop && docker start` (not just restart) after any auth-related config changes
 - [ ] If container enters a restart loop with `ENOTEMPTY` errors, clean stale npm temp dirs (see Section 3)
 - [ ] Set up Docker auto-start on WSL boot (see Section 3 and `wsl_automation_instructions.md` step 6)
+- [ ] Set up Windows Task Scheduler to keep WSL alive (see Section 3 and `wsl_automation_instructions.md` step 7)
 
 ---
 
