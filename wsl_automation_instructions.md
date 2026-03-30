@@ -97,19 +97,57 @@ AUTOSTART
 > ```
 
 7. **Prevent WSL Idle Shutdown (Windows Task Scheduler):**
-WSL2 automatically shuts down when there are no active sessions (all terminals closed). This kills Docker and OpenClaw. To keep WSL alive 24/7, create a Windows Scheduled Task that pings WSL every 2 minutes.
+WSL2 automatically shuts down when there are no active sessions (all terminals/SSH closed). This kills Docker and OpenClaw. To keep WSL alive 24/7, create a Windows Scheduled Task that runs a persistent process inside WSL.
 
-Run this in **PowerShell as Administrator**:
-```powershell
-$action = New-ScheduledTaskAction -Execute "wsl.exe" -Argument "-e /bin/true"; $trigger1 = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 2) -RepetitionDuration (New-TimeSpan -Days 9999); $trigger2 = New-ScheduledTaskTrigger -AtStartup; $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 1); Register-ScheduledTask -TaskName "KeepWSLAlive" -Action $action -Trigger @($trigger1, $trigger2) -Settings $settings -Description "Pings WSL every 2 minutes to prevent idle shutdown"
+First, create the keep-alive script inside WSL:
+```bash
+cat > ~/keep-alive.sh << 'EOF'
+#!/bin/bash
+sudo service docker start > /dev/null 2>&1
+sleep infinity
+EOF
+chmod +x ~/keep-alive.sh
 ```
 
-Verify it's registered:
+Then, add the `vmIdleTimeout` setting to prevent WSL from idling out. Run in **PowerShell**:
 ```powershell
-Get-ScheduledTask -TaskName "KeepWSLAlive" | Select-Object State, TaskName
+Add-Content -Path "$env:USERPROFILE\.wslconfig" -Value "vmIdleTimeout=-1"
 ```
 
-> **How it works:** The task runs `wsl -e /bin/true` every 2 minutes, which is a no-op that keeps WSL awake. Combined with the `.bashrc` Docker auto-start (step 6), the chain is: Task Scheduler wakes WSL → `.bashrc` starts Docker → Docker starts the OpenClaw container.
+Then run each of these commands **one at a time** in **PowerShell as Administrator** (PowerShell breaks multi-line commands if pasted as a block):
+```powershell
+$a = New-ScheduledTaskAction -Execute "wsl.exe" -Argument "-e /home/young/keep-alive.sh"
+```
+```powershell
+$t = New-ScheduledTaskTrigger -AtStartup
+```
+```powershell
+$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -DontStopOnIdleEnd -Hidden
+```
+```powershell
+$p = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType S4U -RunLevel Highest
+```
+```powershell
+Register-ScheduledTask -TaskName "KeepWSLAlive" -Action $a -Trigger $t -Settings $s -Principal $p -Description "Keeps WSL alive"
+```
+
+Start the task immediately (without rebooting):
+```powershell
+Start-ScheduledTask -TaskName "KeepWSLAlive"
+```
+
+Verify it's running (`LastTaskResult` should be `267009` = "task is running"):
+```powershell
+Get-ScheduledTaskInfo -TaskName "KeepWSLAlive" | Select-Object LastRunTime, LastTaskResult
+```
+
+> **How it works:** The task runs `sleep infinity` inside WSL, which keeps the WSL instance permanently alive. The script also starts Docker on launch. Combined with the `.bashrc` Docker auto-start (step 6) and the container's `unless-stopped` restart policy, OpenClaw stays running 24/7.
+
+> **Important gotchas discovered during debugging:**
+> - `wsl -e /bin/true` (a short-lived ping) does NOT work — WSL shuts down between pings because `.bashrc` doesn't run for non-interactive shells, so Docker never starts.
+> - Running the task as `SYSTEM` does NOT work — WSL distributions are per-user, so SYSTEM can't access your WSL instance.
+> - Running as your user without `S4U` opens a visible console window that can be accidentally closed. The `S4U` logon type + `-Hidden` runs it invisibly.
+> - PowerShell's `Register-ScheduledTask` breaks if you try to pass all parameters in a single pasted line — run each variable assignment separately.
 
 > **To remove later:** `Unregister-ScheduledTask -TaskName "KeepWSLAlive" -Confirm:$false`
 

@@ -235,8 +235,12 @@ docker exec openclaw-sandbox npx openclaw cron run <job-uuid>
 ### Gotcha: WSL2 shuts down when all terminals are closed
 - **Symptom:** OpenClaw stops responding on Telegram after you close all WSL/SSH sessions. It resumes when you open a new terminal.
 - **Cause:** WSL2 automatically idles and shuts down when there are no active sessions, killing Docker and the OpenClaw container.
-- **Fix:** Create a Windows Scheduled Task that pings WSL every 2 minutes with `wsl -e /bin/true` to keep it alive. This works on battery, survives sleep/hibernate, and triggers at startup. See `wsl_automation_instructions.md` step 7 for the PowerShell command.
-- **How the chain works:** Task Scheduler wakes WSL → `.bashrc` starts Docker → Docker auto-starts the OpenClaw container (restart policy: `unless-stopped`).
+- **Fix:** Create a Windows Scheduled Task that runs a persistent `sleep infinity` process inside WSL. This keeps WSL alive indefinitely. The script also starts Docker on launch. See `wsl_automation_instructions.md` step 7 for full setup.
+- **How the chain works:** Task Scheduler runs `keep-alive.sh` at startup → script starts Docker and runs `sleep infinity` → Docker auto-starts the OpenClaw container (restart policy: `unless-stopped`).
+- **Things that do NOT work (save yourself the debugging):**
+  - `wsl -e /bin/true` as a periodic ping — exits too fast, `.bashrc` doesn't run for non-interactive shells so Docker never starts
+  - Running the task as `SYSTEM` — WSL distributions are per-user, SYSTEM can't access yours
+  - Running as your user without `S4U` principal — opens a visible console window that can be accidentally closed
 
 ---
 
