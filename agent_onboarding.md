@@ -7,7 +7,10 @@ Welcome your new AI agent to the team! This document walks you through setting u
 
 ---
 
-## Step 1: Create the Agent's Google Identity
+## Step 1: Create the Agent's Google Identity (Optional)
+
+> [!NOTE]
+> A Google account is only needed if you want Google Drive backup or Google Calendar integration. If you only need Telegram + email, skip to Step 2.
 
 Give your agent its own Google account so it never touches your personal data.
 
@@ -23,7 +26,10 @@ Give your agent its own Google account so it never touches your personal data.
 
 ---
 
-## Step 2: Set Up Google Drive (Cloud Backup & File Storage)
+## Step 2: Set Up Google Drive (Cloud Backup & File Storage) (Optional)
+
+> [!NOTE]
+> Requires the Google account from Step 1. Skip if not needed.
 
 ### 2a. Create the Agent's Workspace on Drive
 1. Log into Google Drive as the **agent** account.
@@ -77,35 +83,99 @@ Add:
 
 ---
 
-## Step 3: Set Up Gmail (Agent Email)
+## Step 3: Set Up AgentMail (Agent Email)
 
-### 3a. Generate an App Password
-Since the agent account has 2FA enabled, you need an App Password for programmatic access:
-1. Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) (logged in as the agent).
-2. Create a new App Password:
-   - App: `Mail`
-   - Device: `Linux`
-3. Copy the generated 16-character password — you'll need it below.
+[AgentMail](https://agentmail.to) provides disposable email inboxes purpose-built for AI agents — no Google account, App Passwords, or IMAP configuration needed.
 
-### 3b. Configure Email in OpenClaw
+### 3a. Create an AgentMail Account and Inbox
+1. Sign up at [agentmail.to](https://agentmail.to) and get your API key.
+2. Create an inbox via the dashboard or API:
+   ```bash
+   curl -X POST https://api.agentmail.to/v0/inboxes \
+     -H "Authorization: Bearer YOUR_AGENTMAIL_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"username": "myagent"}'
+   ```
+   This gives your agent an email address like `myagent@agentmail.to`.
+
+### 3b. Install the AgentMail Listener Plugin
+The AgentMail WebSocket listener plugin gives your agent **real-time** email notifications — it receives emails instantly as they arrive.
+
 ```bash
-oc configure
+oc plugins install @openclaw/agentmail-listener
 ```
-Navigate to the email/SMTP settings and enter:
-- **SMTP Host:** `smtp.gmail.com`
-- **SMTP Port:** `587`
-- **Username:** `myclaw.agent@gmail.com`
-- **Password:** *(the App Password from Step 3a)*
 
-### 3c. Set Up Email Forwarding (Optional)
-If you want the agent to monitor incoming emails:
-1. In the **agent's** Gmail settings → **Forwarding and POP/IMAP**
-2. Enable IMAP access
-3. Optionally set up a forwarding rule to your personal email for visibility
+Configure the plugin by adding the AgentMail settings to `~/.openclaw/openclaw.json`:
+```json
+{
+  "extensions": {
+    "openclaw-agentmail-listener": {
+      "apiKey": "YOUR_AGENTMAIL_API_KEY",
+      "inboxes": ["myagent@agentmail.to"]
+    }
+  }
+}
+```
+
+Restart the container to activate:
+```bash
+docker stop openclaw-sandbox && docker start openclaw-sandbox
+```
+
+Verify the listener is connected by checking the logs:
+```bash
+docker logs openclaw-sandbox 2>&1 | grep agentmail
+```
+You should see:
+```
+agentmail-listener: connected to wss://ws.agentmail.to/v0, subscribing to myagent@agentmail.to
+agentmail-listener: subscribed (org=...)
+```
+
+### 3c. Set Up Catch-Up Polling (Resilience)
+The WebSocket listener only works while OpenClaw is running. If WSL, Docker, or the container goes down, emails received during the outage would be missed. A catch-up cron job solves this by polling for unread emails on a schedule.
+
+Ask your agent via Telegram to create the cron job:
+> "Create an hourly cron job called 'check-agentmail' that uses web_fetch to GET `https://api.agentmail.to/v0/inboxes/myagent@agentmail.to/messages?labels=unread` with Authorization header `Bearer YOUR_AGENTMAIL_API_KEY`. For each unread message, process the email content, then PATCH `https://api.agentmail.to/v0/inboxes/myagent@agentmail.to/messages/{message_id}` with body `{"add_labels":["read"],"remove_labels":["unread"]}` to mark it as read. Deliver results to Telegram."
+
+The agent will create the job with the correct delivery config. Verify:
+```bash
+docker exec openclaw-sandbox cat /home/node/.openclaw/cron/jobs.json | \
+  python3 -c "
+import sys,json
+jobs=json.load(sys.stdin)['jobs']
+for j in jobs:
+    if 'agentmail' in j.get('name',''):
+        print(f\"name={j['name']}\")
+        print(f\"  schedule={j['schedule']}\")
+        print(f\"  target={j.get('sessionTarget')}\")
+        print(f\"  delivery={j.get('delivery')}\")
+        print(f\"  state.lastDeliveryStatus={j.get('state',{}).get('lastDeliveryStatus','N/A')}\")
+"
+```
+
+> [!TIP]
+> **How the two mechanisms work together:**
+> - **WebSocket listener** handles real-time delivery when OpenClaw is running (instant, no extra API calls).
+> - **Cron polling** catches up on anything missed during downtime (hourly, uses the `unread` label filter so it never reprocesses emails the listener already handled).
+> - Both use AgentMail's label system (`unread`/`read`) for deduplication — no email is processed twice.
+
+### 3d. Test Email Delivery
+Send a test email to your agent's address from any email client:
+```
+To: myagent@agentmail.to
+Subject: Test
+Body: Hello agent!
+```
+
+You should receive a Telegram notification within seconds (via the WebSocket listener). If the container was down when the email arrived, the next hourly cron run will pick it up.
 
 ---
 
-## Step 4: Set Up Google Calendar (Scheduling)
+## Step 4: Set Up Google Calendar (Scheduling) (Optional)
+
+> [!NOTE]
+> Requires the Google account from Step 1. Skip if not needed.
 
 ### 4a. Share Your Calendar with the Agent
 1. Go to [calendar.google.com](https://calendar.google.com) logged into **your personal** account.
@@ -152,14 +222,191 @@ Follow the Slack integration prompts to connect a workspace.
 
 ---
 
-## Step 6: Security Boundaries
+## Step 6: Configure the LLM Model & API Keys
+
+OpenClaw uses **three configuration files** that must stay consistent. Mismatches between them are the #1 cause of agent failures.
+
+| File (host path) | Purpose |
+|---|---|
+| `~/.openclaw/config.json` | Bootstrap: LLM provider, API key, Telegram bot token |
+| `~/.openclaw/openclaw.json` | Main config: model selection, fallbacks, auth profiles |
+| `~/.openclaw/agents/main/agent/auth-profiles.json` | Runtime auth state: actual API keys the agent uses |
+
+### 6a. Single Model Setup (Recommended to Start)
+In `openclaw.json`, configure a single primary model with no fallbacks:
+```json
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "google/gemini-3.1-flash-lite-preview"
+      },
+      "models": {
+        "google/gemini-3.1-flash-lite-preview": {
+          "alias": "flash"
+        }
+      }
+    }
+  },
+  "auth": {
+    "profiles": {
+      "google:default": {
+        "provider": "google",
+        "mode": "api_key"
+      }
+    }
+  }
+}
+```
+
+In `auth-profiles.json`, set the matching API key:
+```json
+{
+  "version": 1,
+  "profiles": {
+    "google:default": {
+      "type": "api_key",
+      "provider": "google",
+      "key": "YOUR_GEMINI_API_KEY"
+    }
+  },
+  "lastGood": {
+    "google": "google:default"
+  }
+}
+```
+
+Verify `config.json` has the same key under `gemini.apiKey`.
+
+### 6b. Adding a Fallback Model (Optional)
+To add a second provider (e.g., Anthropic) as a fallback, update **all three files**:
+
+1. **`openclaw.json`** — Add the fallback and auth profile:
+   ```json
+   {
+     "agents": {
+       "defaults": {
+         "model": {
+           "primary": "google/gemini-3.1-flash-lite-preview",
+           "fallbacks": ["anthropic/claude-sonnet-4-6"]
+         },
+         "models": {
+           "google/gemini-3.1-flash-lite-preview": { "alias": "flash" },
+           "anthropic/claude-sonnet-4-6": { "alias": "sonnet" }
+         }
+       }
+     },
+     "auth": {
+       "profiles": {
+         "google:default": { "provider": "google", "mode": "api_key" },
+         "anthropic:default": { "provider": "anthropic", "mode": "api_key" }
+       }
+     }
+   }
+   ```
+
+2. **`auth-profiles.json`** — Add the new provider's API key:
+   ```json
+   {
+     "version": 1,
+     "profiles": {
+       "google:default": {
+         "type": "api_key",
+         "provider": "google",
+         "key": "YOUR_GEMINI_API_KEY"
+       },
+       "anthropic:default": {
+         "type": "api_key",
+         "provider": "anthropic",
+         "key": "YOUR_ANTHROPIC_API_KEY"
+       }
+     },
+     "lastGood": {
+       "google": "google:default",
+       "anthropic": "anthropic:default"
+     }
+   }
+   ```
+
+3. **Restart the container** with `docker stop && docker start` (not just `restart`) to ensure clean auth state.
+
+> [!WARNING]
+> **Common pitfalls with API keys and models:**
+> - If `config.json` and `auth-profiles.json` have different API keys, the agent fails with `API_KEY_INVALID` (400) errors.
+> - Leftover OAuth profiles or old API keys in `auth-profiles.json` cause the agent to attempt dead authentication paths.
+> - When an API key fails repeatedly, OpenClaw marks the profile as `window=disabled` with `reason=auth_permanent`. This state persists across `docker restart` — you need `docker stop && docker start` to clear it. Also reset `usageStats` in `auth-profiles.json` (set `errorCount` to `0` and `lastFailureAt` to `0`).
+> - Leftover fallback model entries cause the agent to cycle through models on failure, potentially hitting rate limits on multiple providers.
+>
+> For detailed troubleshooting, see the [Setup Guide](./openclaw-setup-guide.md).
+
+---
+
+## Step 7: Set Up Cron Jobs (Scheduled Tasks)
+
+OpenClaw supports cron jobs for recurring tasks — daily reports, status checks, email polling, reminders, etc.
+
+### 7a. Creating Cron Jobs
+The most reliable way to create cron jobs is to **ask the agent via Telegram**. When the agent creates jobs from within a Telegram session, it correctly wires the delivery config.
+
+Example prompt:
+> "Create a daily cron job at 8am PT called 'daily-report' that reviews today's chat history and sends me a brief summary."
+
+### 7b. Cron Job Delivery to Telegram
+For cron job output to reach you on Telegram, the job must have:
+```json
+{
+  "sessionTarget": "isolated",
+  "delivery": {
+    "mode": "announce",
+    "channel": "telegram",
+    "to": "YOUR_TELEGRAM_CHAT_ID"
+  }
+}
+```
+
+> [!WARNING]
+> **`sessionTarget: "main"` does NOT deliver to Telegram.** It routes output to the internal `webchat` channel. The job runs successfully (logs show `status: ok`) but you never see the output. Always use `"isolated"` with explicit delivery config.
+
+### 7c. Finding Your Telegram Chat ID
+Your chat ID appears in session keys. Check the container logs at startup:
+```bash
+docker logs openclaw-sandbox 2>&1 | grep "telegram.*direct"
+```
+Look for a session key like `agent:main:telegram:direct:<chat_id>`.
+
+### 7d. Verify Cron Job Config
+After setting up jobs, verify all of them have correct delivery:
+```bash
+docker exec openclaw-sandbox cat /home/node/.openclaw/cron/jobs.json | \
+  python3 -c "
+import sys,json
+jobs=json.load(sys.stdin)['jobs']
+for j in jobs:
+    print(f\"{j['name']}: target={j.get('sessionTarget','N/A')}, delivery={j.get('delivery','N/A')}\")
+"
+```
+Every job should show `target=isolated` and `delivery={'mode': 'announce', 'channel': 'telegram', 'to': '<your_chat_id>'}`.
+
+### 7e. Manually Trigger a Cron Job
+To test a job immediately:
+```bash
+docker exec openclaw-sandbox bash -c "export PATH=/home/node/.npm-global/bin:\$PATH && openclaw cron run <job-uuid>"
+```
+You can find job UUIDs in `~/.openclaw/cron/jobs.json`.
+
+> [!NOTE]
+> **Editing `jobs.json` directly may get overwritten.** The OpenClaw gateway manages this file and may overwrite manual edits on reload. Always create or update jobs by asking the agent via Telegram.
+
+---
+
+## Step 8: Security Boundaries
 
 ### What the Agent CAN Access
 | Service | Access Level | Shared With You? |
 |---|---|---|
-| Google Drive | Full access to its own Drive | Via shared folders |
-| Gmail | Send/receive from agent's email | Via forwarding (optional) |
-| Google Calendar | Read/write its own calendar | Via calendar sharing |
+| AgentMail | Send/receive from agent's inbox | Via Telegram notifications |
+| Google Drive | Full access to its own Drive (if configured) | Via shared folders |
+| Google Calendar | Read/write its own calendar (if configured) | Via calendar sharing |
 | Your Calendar | Read/write (if you shared it) | You control the permission |
 | OpenClaw Workspace | Full access to `~/.openclaw/` | Via Docker volume mount |
 
@@ -172,25 +419,27 @@ Follow the Slack integration prompts to connect a workspace.
 ### Security Best Practices
 1. **Never share your personal Google password** with the agent account.
 2. **Review shared folder permissions** periodically — remove any shares you no longer need.
-3. **Monitor the agent's Gmail** by setting up forwarding to your personal email.
-4. **Set a hard Google Cloud budget** if using any paid APIs on the agent's account.
-5. **Rotate the App Password** periodically (delete and recreate in Google settings).
+3. **Set a hard Google Cloud budget** if using any paid APIs on the agent's account.
+4. **Rotate API keys** periodically and update all three config files consistently.
+5. **Keep the Telegram bot private** — never share the Bot Token, and consider whitelisting only your Telegram User ID.
 
 For a deeper dive on container-level security, Docker sandboxing, and prompt injection risks, see the [Security Reference Guide](./openclaw_security_reference.md).
 
 ---
 
-## Step 7: Verify Everything Works
+## Step 9: Verify Everything Works
 
 Run through this checklist to confirm your agent is fully operational:
 
-- [ ] **Google Drive:** `rclone lsd agent-drive:` returns your folder list
-- [ ] **Backup cron:** `crontab -l` shows the backup schedule
 - [ ] **Telegram:** Send a message to your bot and get a response
-- [ ] **Calendar:** Ask the bot "What's on my calendar today?"
-- [ ] **Email:** Ask the bot to "Send a test email to my personal address"
-- [ ] **Memory:** Ask the bot "What do you remember about me?" (should pull from MEMORY.md)
+- [ ] **AgentMail (real-time):** Send an email to the agent's inbox and receive a Telegram notification within seconds
+- [ ] **AgentMail (catch-up):** Trigger the `check-agentmail` cron job manually and confirm delivery
+- [ ] **Cron jobs:** All jobs show `sessionTarget: "isolated"` with Telegram delivery config
+- [ ] **API key consistency:** `config.json` and `auth-profiles.json` have the same API key
 - [ ] **Docker health:** `docker ps` shows `openclaw-sandbox` as "Up"
+- [ ] **Memory:** Ask the bot "What do you remember about me?" (should pull from memory)
+- [ ] **Google Drive:** `rclone lsd agent-drive:` returns your folder list (if configured)
+- [ ] **Calendar:** Ask the bot "What's on my calendar today?" (if configured)
 
 ---
 
@@ -200,9 +449,18 @@ Run through this checklist to confirm your agent is fully operational:
 |---|---|
 | Run any OpenClaw command | `oc <command>` |
 | Check bot logs | `docker logs -f openclaw-sandbox` |
-| Restart the bot | `docker restart openclaw-sandbox` |
+| Restart the bot (soft) | `docker restart openclaw-sandbox` |
+| Restart the bot (full, clears auth state) | `docker stop openclaw-sandbox && docker start openclaw-sandbox` |
+| Trigger a cron job | `oc cron run <job-uuid>` |
+| Verify cron delivery config | See Step 7d above |
 | Manual backup | `rclone sync ~/.openclaw/workspace/ agent-drive:openclaw-backups/workspace/` |
 | Check backup cron | `crontab -l` |
 | Test Drive connection | `rclone lsd agent-drive:` |
 | View bot health | `oc health` |
 | Interactive config | `oc configure` |
+
+---
+
+## Troubleshooting
+
+For detailed debugging of common issues (API key mismatches, auth cooldowns, cron delivery failures, npm ENOTEMPTY errors, Docker/WSL persistence), see the [OpenClaw Setup Guide](./openclaw-setup-guide.md).
