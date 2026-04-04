@@ -47,28 +47,31 @@ sudo chown -R 1000:1000 ~/.openclaw
 # This container will also pre-install the gemini and telegram plugins upon booting!
 docker run -d \
   --name openclaw-sandbox \
-  --restart unless-stopped \
+  --restart always \
   --user 1000:1000 \
   --security-opt no-new-privileges:true \
   -v ~/.openclaw:/home/node/.openclaw \
   -e HOME=/home/node \
   node:22-slim \
-  bash -c "mkdir -p /home/node/.npm-global && npm config set prefix '/home/node/.npm-global' && export PATH=/home/node/.npm-global/bin:\$PATH && npm install -g openclaw && (openclaw gateway || sleep infinity)"
+  bash -c 'mkdir -p /home/node/.npm-global && npm config set prefix "/home/node/.npm-global" && export PATH=/home/node/.npm-global/bin:$PATH && if ! command -v openclaw >/dev/null 2>&1; then npm install -g openclaw && cd /home/node/.npm-global/lib/node_modules/openclaw && npm install grammy @grammyjs/runner @grammyjs/transformer-throttler @grammyjs/types; fi && (openclaw gateway || sleep infinity)'
 ```
 
-> **Known Issue — npm ENOTEMPTY on restart:** The container runs `npm install -g openclaw` on every boot. If a previous boot was interrupted, a stale temp directory can cause repeated `ENOTEMPTY` errors and the container will restart in a loop. Fix by exec'ing into the container and removing the stale directory:
-> ```bash
-> docker exec openclaw-sandbox rm -rf /home/node/.npm-global/lib/node_modules/.openclaw-*
-> docker restart openclaw-sandbox
-> ```
+> **Design note — install-once boot:** The container only installs OpenClaw on first boot (when the binary doesn't exist yet). Subsequent restarts skip the install and go straight to `openclaw gateway`. This eliminates the npm ENOTEMPTY restart-loop bug that occurred when `npm install -g openclaw` was interrupted mid-install and left stale temp directories. To upgrade OpenClaw, use the `oc-upgrade` alias (see step 4).
 
-4. **Create a Shortcut (Bash Function) for Easier Access:**
-*(This final step creates a permanent `oc` shortcut that properly passes all your arguments through to the container!)*
+> **Telegram dependency note:** The Telegram plugin requires `grammy`, `@grammyjs/runner`, `@grammyjs/transformer-throttler`, and `@grammyjs/types`, which are not always installed by `npm install -g openclaw`. The container CMD installs these explicitly after the initial OpenClaw install.
+
+4. **Create Shortcuts (Bash Functions & Aliases):**
+*(These create a permanent `oc` shortcut for running OpenClaw commands and an `oc-upgrade` alias for upgrading OpenClaw inside the container.)*
 ```bash
 cat >> ~/.bashrc << 'EOF'
+
+# OpenClaw shortcuts
 oc() { docker exec -it openclaw-sandbox bash -c "export PATH=/home/node/.npm-global/bin:\$PATH && openclaw $*"; }
+alias oc-upgrade="docker exec openclaw-sandbox bash -c 'export PATH=/home/node/.npm-global/bin:\$PATH && npm install -g openclaw && cd /home/node/.npm-global/lib/node_modules/openclaw && npm install grammy @grammyjs/runner @grammyjs/transformer-throttler @grammyjs/types'"
 EOF
 ```
+
+> **Upgrading OpenClaw:** Since the container no longer reinstalls on every boot, run `oc-upgrade` when you want to update to the latest version. This reinstalls OpenClaw and its Telegram dependencies in one shot. No container restart is needed for most changes (hot reload picks them up), but run `docker restart openclaw-sandbox` if the upgrade includes plugin changes.
 
 5. **Post-Setup: Verify API Key Consistency:**
 After running `oc setup` or `oc configure`, the runtime creates `~/.openclaw/agents/main/agent/auth-profiles.json` with its own copy of your API key. Verify both files have the same key:
@@ -116,7 +119,7 @@ Add-Content -Path "$env:USERPROFILE\.wslconfig" -Value "vmIdleTimeout=-1"
 
 Then run each of these commands **one at a time** in **PowerShell as Administrator** (PowerShell breaks multi-line commands if pasted as a block):
 ```powershell
-$a = New-ScheduledTaskAction -Execute "wsl.exe" -Argument "-e /home/young/keep-alive.sh"
+$a = New-ScheduledTaskAction -Execute "wsl.exe" -Argument "-e /home/<your_wsl_username>/keep-alive.sh"
 ```
 ```powershell
 $t = New-ScheduledTaskTrigger -AtStartup
@@ -141,7 +144,7 @@ Verify it's running (`LastTaskResult` should be `267009` = "task is running"):
 Get-ScheduledTaskInfo -TaskName "KeepWSLAlive" | Select-Object LastRunTime, LastTaskResult
 ```
 
-> **How it works:** The task runs `sleep infinity` inside WSL, which keeps the WSL instance permanently alive. The script also starts Docker on launch. Combined with the `.bashrc` Docker auto-start (step 6) and the container's `unless-stopped` restart policy, OpenClaw stays running 24/7.
+> **How it works:** The task runs `sleep infinity` inside WSL, which keeps the WSL instance permanently alive. The script also starts Docker on launch. Combined with the `.bashrc` Docker auto-start (step 6) and the container's `always` restart policy, OpenClaw stays running 24/7.
 
 > **Important gotchas discovered during debugging:**
 > - `wsl -e /bin/true` (a short-lived ping) does NOT work — WSL shuts down between pings because `.bashrc` doesn't run for non-interactive shells, so Docker never starts.

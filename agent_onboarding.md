@@ -336,6 +336,7 @@ To add a second provider (e.g., Anthropic) as a fallback, update **all three fil
 > - Leftover OAuth profiles or old API keys in `auth-profiles.json` cause the agent to attempt dead authentication paths.
 > - When an API key fails repeatedly, OpenClaw marks the profile as `window=disabled` with `reason=auth_permanent`. This state persists across `docker restart` — you need `docker stop && docker start` to clear it. Also reset `usageStats` in `auth-profiles.json` (set `errorCount` to `0` and `lastFailureAt` to `0`).
 > - Leftover fallback model entries cause the agent to cycle through models on failure, potentially hitting rate limits on multiple providers.
+> - The Telegram plugin requires `grammy` and related packages. If logs show `Cannot find module 'grammy'`, run `oc-upgrade` to reinstall all dependencies.
 >
 > For detailed troubleshooting, see the [Setup Guide](./openclaw-setup-guide.md).
 
@@ -451,6 +452,7 @@ Run through this checklist to confirm your agent is fully operational:
 | Check bot logs | `docker logs -f openclaw-sandbox` |
 | Restart the bot (soft) | `docker restart openclaw-sandbox` |
 | Restart the bot (full, clears auth state) | `docker stop openclaw-sandbox && docker start openclaw-sandbox` |
+| Upgrade OpenClaw | `oc-upgrade` |
 | Trigger a cron job | `oc cron run <job-uuid>` |
 | Verify cron delivery config | See Step 7d above |
 | Manual backup | `rclone sync ~/.openclaw/workspace/ agent-drive:openclaw-backups/workspace/` |
