@@ -453,6 +453,9 @@ Run through this checklist to confirm your agent is fully operational:
 | Restart the bot (soft) | `docker restart openclaw-sandbox` |
 | Restart the bot (full, clears auth state) | `docker stop openclaw-sandbox && docker start openclaw-sandbox` |
 | Upgrade OpenClaw | `oc-upgrade` |
+| List agents | `oc agents list --bindings` |
+| Add a new agent | `oc agents add <name> --non-interactive --workspace ... --model ... --bind telegram:<name>` |
+| Approve Telegram pairing | `oc pairing approve telegram <CODE>` |
 | Trigger a cron job | `oc cron run <job-uuid>` |
 | Verify cron delivery config | See Step 7d above |
 | Manual backup | `rclone sync ~/.openclaw/workspace/ agent-drive:openclaw-backups/workspace/` |

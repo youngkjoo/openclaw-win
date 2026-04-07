@@ -265,7 +265,64 @@ The original container CMD ran `npm install -g openclaw` on every boot to auto-u
 
 ---
 
-## 4. Quick Checklist for New OpenClaw Setup
+## 4. Multi-Agent Setup
+
+OpenClaw supports multiple agents, each with its own workspace, sessions, model, and Telegram bot. This is useful for separating concerns (e.g., a main assistant vs a sysadmin agent).
+
+### Current agents
+
+| Agent | Telegram Bot | Role |
+|-------|-------------|------|
+| `main` | `@JooJJBot` | General assistant (default) |
+| `sysadmin` | `@DF_Sysop_Bot` | System administration, health checks, config validation |
+
+### How it works
+
+- Each agent has its own directory under `~/.openclaw/agents/<id>/` (sessions, auth profiles)
+- Each agent has its own workspace under `~/.openclaw/workspace/<id>/` with a `SOUL.md` defining its personality
+- Each agent is bound to a separate Telegram bot via `bindings` in `openclaw.json`
+- The `channels.telegram.accounts` section maps account IDs to bot tokens
+
+### Adding a new agent
+
+1. Create a new Telegram bot via BotFather (`/newbot`)
+2. Add the agent:
+   ```bash
+   oc agents add <name> \
+     --non-interactive \
+     --workspace /home/node/.openclaw/workspace/<name> \
+     --model google/gemini-3.1-flash-lite-preview \
+     --bind telegram:<name>
+   ```
+3. Add the bot token to `openclaw.json` under `channels.telegram.accounts`:
+   ```json5
+   accounts: {
+     "default": { "botToken": "<existing>" },
+     "<name>": { "botToken": "<new token from BotFather>" }
+   }
+   ```
+4. Verify bindings exist in `openclaw.json`:
+   ```json5
+   bindings: [
+     { "agentId": "main", "match": { "channel": "telegram", "accountId": "default" } },
+     { "agentId": "<name>", "match": { "channel": "telegram", "accountId": "<name>" } }
+   ]
+   ```
+5. Create `SOUL.md` in the agent's workspace directory
+6. Restart gateway: `docker restart openclaw-sandbox`
+7. Pair with the new bot: send a message, then approve the pairing code:
+   ```bash
+   oc pairing approve telegram <CODE>
+   ```
+
+### Key constraints
+- Never reuse `agentDir` across agents (causes auth/session collisions)
+- Each Telegram bot token must be unique — one bot per agent
+- Auth credentials are not shared between agents; each gets its own `auth-profiles.json`
+
+---
+
+## 5. Quick Checklist for New OpenClaw Setup
 
 - [ ] Set API key consistently in `config.json` and `auth-profiles.json`
 - [ ] Remove any unused auth profiles (OAuth, old API keys) from both `openclaw.json` and `auth-profiles.json`
@@ -275,10 +332,10 @@ The original container CMD ran `npm install -g openclaw` on every boot to auto-u
 - [ ] After creating cron jobs, verify they have `sessionTarget: "isolated"` with Telegram delivery — or create them by asking the agent directly via Telegram
 - [ ] Test a cron job manually with `oc cron run <job-uuid>` and confirm delivery arrives on Telegram
 - [ ] Use `docker stop && docker start` (not just restart) after any auth-related config changes
-- [ ] Verify Telegram plugin loaded (check logs for `[telegram] [default] starting provider` without `Cannot find module` errors)
+- [ ] Verify Telegram plugin loaded (check logs for `[telegram] [default] starting provider` and `[telegram] [sysadmin] starting provider` without `Cannot find module` errors)
 - [ ] Set up Docker auto-start on WSL boot (see Section 3 and `wsl_automation_instructions.md` step 6)
 - [ ] Set up Windows Task Scheduler to keep WSL alive (see Section 3 and `wsl_automation_instructions.md` step 7)
 
 ---
 
-*Last updated: 2026-04-04*
+*Last updated: 2026-04-07*
