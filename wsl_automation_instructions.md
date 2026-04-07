@@ -119,30 +119,37 @@ Add-Content -Path "$env:USERPROFILE\.wslconfig" -Value "vmIdleTimeout=-1"
 
 Then run each of these commands **one at a time** in **PowerShell as Administrator** (PowerShell breaks multi-line commands if pasted as a block):
 ```powershell
-$a = New-ScheduledTaskAction -Execute "wsl.exe" -Argument "-e /home/<your_wsl_username>/keep-alive.sh"
+$a = New-ScheduledTaskAction -Execute "wsl.exe" -Argument "-u <your_wsl_username> -- bash /home/<your_wsl_username>/keep-alive.sh"
 ```
 ```powershell
-$t = New-ScheduledTaskTrigger -AtStartup
+$t1 = New-ScheduledTaskTrigger -AtStartup
 ```
 ```powershell
-$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -DontStopOnIdleEnd -Hidden
+$t2 = New-ScheduledTaskTrigger -AtLogOn
+```
+```powershell
+$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -DontStopOnIdleEnd -Hidden -ExecutionTimeLimit 0
 ```
 ```powershell
 $p = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType S4U -RunLevel Highest
 ```
 ```powershell
-Register-ScheduledTask -TaskName "KeepWSLAlive" -Action $a -Trigger $t -Settings $s -Principal $p -Description "Keeps WSL alive"
+Register-ScheduledTask -TaskName "KeepWSLAlive" -Action $a -Trigger @($t1, $t2) -Settings $s -Principal $p -Description "Keeps WSL alive"
 ```
+
+> **Why two triggers?** `AtStartup` covers unattended reboots (e.g. Windows Update), `AtLogOn` covers normal login sessions. Without both, the task may not restart after a Windows Update reboot if no user is logged in.
 
 Start the task immediately (without rebooting):
 ```powershell
 Start-ScheduledTask -TaskName "KeepWSLAlive"
 ```
 
-Verify it's running (`LastTaskResult` should be `267009` = "task is running"):
+Verify it's running:
 ```powershell
+Get-ScheduledTask -TaskName "KeepWSLAlive" | Select-Object State
 Get-ScheduledTaskInfo -TaskName "KeepWSLAlive" | Select-Object LastRunTime, LastTaskResult
 ```
+State should be `Running`. If `LastTaskResult` is `267014` ("terminated by user"), run `Start-ScheduledTask -TaskName "KeepWSLAlive"` to restart it.
 
 > **How it works:** The task runs `sleep infinity` inside WSL, which keeps the WSL instance permanently alive. The script also starts Docker on launch. Combined with the `.bashrc` Docker auto-start (step 6) and the container's `always` restart policy, OpenClaw stays running 24/7.
 

@@ -257,7 +257,7 @@ The original container CMD ran `npm install -g openclaw` on every boot to auto-u
 - **Symptom:** OpenClaw stops responding on Telegram after you close all WSL/SSH sessions. It resumes when you open a new terminal.
 - **Cause:** WSL2 automatically idles and shuts down when there are no active sessions, killing Docker and the OpenClaw container.
 - **Fix:** Create a Windows Scheduled Task that runs a persistent `sleep infinity` process inside WSL. This keeps WSL alive indefinitely. The script also starts Docker on launch. See `wsl_automation_instructions.md` step 7 for full setup.
-- **How the chain works:** Task Scheduler runs `keep-alive.sh` at startup → script starts Docker and runs `sleep infinity` → Docker auto-starts the OpenClaw container (restart policy: `always`).
+- **How the chain works:** Task Scheduler runs `keep-alive.sh` at startup and login → script starts Docker and runs `sleep infinity` → Docker auto-starts the OpenClaw container (restart policy: `always`). Two triggers (AtStartup + AtLogOn) ensure the task survives unattended reboots (e.g. Windows Update).
 - **Things that do NOT work (save yourself the debugging):**
   - `wsl -e /bin/true` as a periodic ping — exits too fast, `.bashrc` doesn't run for non-interactive shells so Docker never starts
   - Running the task as `SYSTEM` — WSL distributions are per-user, SYSTEM can't access yours
