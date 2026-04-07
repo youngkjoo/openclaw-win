@@ -184,6 +184,15 @@ Every job should show `target=isolated` and `delivery={'mode': 'announce', 'chan
 
 ## 3. Container Management
 
+### Gotcha: Backups failing with "Permission denied"
+- **Symptom:** Your automated backups (e.g., `tar` or `rclone`) fail because they cannot read files inside `~/.openclaw/`.
+- **Cause:** The Docker container runs as `root` and creates new configuration files or logs inside the bind-mounted `~/.openclaw/` directory with `root` ownership.
+- **Fix:** You must reclaim ownership for your host user. Run:
+  ```bash
+  sudo chown -R $USER:$USER ~/.openclaw/
+  ```
+  *(Note: The daily snapshot script in `~/openclaw-win/scripts/openclaw-backup.sh` handles backups and excludes files intelligently, but you must still ensure you own the files if errors arise).*
+
 ### Docker setup reference
 ```bash
 # OpenClaw runs in a node:22-slim container named "openclaw-sandbox"

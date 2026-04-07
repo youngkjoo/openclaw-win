@@ -68,18 +68,30 @@ Give your agent its own Google account so it never touches your personal data.
    You should see the folders you created. *(Note: use `lsd` not `ls` — `ls` only lists files, not empty folders!)*
 
 ### 2d. Automate Daily Backups
-Add a cron job to back up OpenClaw data to Drive daily:
-```bash
-crontab -e
-```
-Add:
-```cron
-# Daily backup at 3am — excludes config.json for security
-0 3 * * * rclone sync ~/.openclaw/workspace/ agent-drive:openclaw-backups/workspace/ --exclude config.json 2>&1 | logger -t openclaw-backup
+To ensure complete backups of the OpenClaw configuration and data, use the snapshot scripts located in `~/openclaw-win/scripts/`.
 
-# Weekly full backup archive (Sundays at 4am)
-0 4 * * 0 tar -czf /tmp/openclaw-full-$(date +\%Y\%m\%d).tar.gz --exclude='config.json' ~/.openclaw/ && rclone copy /tmp/openclaw-full-*.tar.gz agent-drive:openclaw-backups/archives/ && rm /tmp/openclaw-full-*.tar.gz
-```
+1. Ensure the scripts have execute permissions:
+   ```bash
+   chmod +x ~/openclaw-win/scripts/openclaw-backup.sh
+   chmod +x ~/openclaw-win/scripts/backup-check.sh
+   ```
+
+2. Add cron jobs for the daily scheduled backup and the catch-up check (to handle missed backups if your laptop falls asleep):
+   ```bash
+   crontab -e
+   ```
+   Add:
+   ```cron
+   # OpenClaw Snapshot Backups
+   # Daily backup at 3am — excludes config.json for security
+   0 3 * * * ~/openclaw-win/scripts/openclaw-backup.sh >> ~/.openclaw/backup-cron.log 2>&1
+   
+   # Hourly catch-up check (runs backup if laptop was asleep during 3am)
+   0 * * * * ~/openclaw-win/scripts/backup-check.sh >> ~/.openclaw/backup-check.log 2>&1
+   ```
+
+> [!IMPORTANT]
+> Since the Docker container writes log files as `root` inside the `~/.openclaw/` directory, you must run `sudo chown -R $USER:$USER ~/.openclaw/` periodically or whenever new agents are created, otherwise the `tar` backup command will fail with a "Permission denied" error.
 
 ---
 
