@@ -204,7 +204,7 @@ oc-upgrade
 - The container CMD uses `command -v openclaw` to check if OpenClaw is already installed.
 - **First boot:** Installs OpenClaw and plugin dependencies via `npm install -g` + manual dep install (needed because `npm install -g openclaw` doesn't include plugin deps — see [#52719](https://github.com/openclaw/openclaw/issues/52719)), then starts the gateway with `--allow-unconfigured`.
 - **Subsequent boots:** Skips installation and starts the gateway immediately.
-- **Upgrading:** Run `oc-upgrade` which calls `openclaw update` — this upgrades the core, syncs plugin dependencies, runs doctor checks, and restarts the gateway automatically.
+- **Upgrading:** Run `oc-upgrade` — this runs `npm install -g openclaw`, reinstalls plugin deps, runs `openclaw doctor`, and restarts the gateway. **Do not use `openclaw update` directly** — it wipes plugin deps during npm reinstall, then crashes before syncing them back ([#52719](https://github.com/openclaw/openclaw/issues/52719)).
 
 ### Why not reinstall on every boot?
 The original container CMD ran `npm install -g openclaw` on every boot to auto-update. This caused recurring problems:
@@ -216,7 +216,7 @@ The original container CMD ran `npm install -g openclaw` on every boot to auto-u
 ### Gotcha: Plugin missing dependencies
 - `npm install -g openclaw` does not install all plugin dependencies ([#52719](https://github.com/openclaw/openclaw/issues/52719)). This only affects first boot (the container CMD handles it manually).
 - **Symptom:** Logs show `Cannot find module '<package>'` and the gateway fails to start.
-- **Fix:** Run `oc-upgrade` (which calls `openclaw update` and syncs all plugin deps). If the CLI itself is broken, fall back to manual install:
+- **Fix:** Run `oc-upgrade` (which reinstalls openclaw + plugin deps, runs doctor, and restarts the gateway). If the CLI itself is broken, fall back to manual install:
   ```bash
   docker exec openclaw-sandbox bash -c "export PATH=/home/node/.npm-global/bin:\$PATH && cd /home/node/.npm-global/lib/node_modules/openclaw && npm install grammy @grammyjs/runner @grammyjs/transformer-throttler @grammyjs/types @buape/carbon @larksuiteoapi/node-sdk @slack/web-api"
   docker restart openclaw-sandbox

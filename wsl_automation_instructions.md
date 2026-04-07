@@ -58,7 +58,7 @@ docker run -d \
 
 > **Design note — install-once boot:** The container only installs OpenClaw on first boot (when the binary doesn't exist yet). Subsequent restarts skip the install and go straight to `openclaw gateway`. This eliminates the npm ENOTEMPTY restart-loop bug that occurred when `npm install -g openclaw` was interrupted mid-install and left stale temp directories. To upgrade OpenClaw, use the `oc-upgrade` alias (see step 4).
 
-> **Plugin dependency note:** The container CMD manually installs plugin dependencies on first boot because `npm install -g openclaw` does not include them (see [openclaw/openclaw#52719](https://github.com/openclaw/openclaw/issues/52719)). After first boot, use `oc-upgrade` (which runs `openclaw update`) to upgrade — this handles plugin dependency sync automatically. The `--allow-unconfigured` flag on `openclaw gateway` is required for newer versions that otherwise refuse to start without running `openclaw setup`.
+> **Plugin dependency note:** The container CMD manually installs plugin dependencies on first boot because `npm install -g openclaw` does not include them (see [openclaw/openclaw#52719](https://github.com/openclaw/openclaw/issues/52719)). The `oc-upgrade` alias handles this automatically on upgrades too. **Do not use `openclaw update` directly** — it runs `npm install -g` which wipes the plugin deps, then the CLI crashes before it can sync them back. The `--allow-unconfigured` flag on `openclaw gateway` is required for newer versions that otherwise refuse to start without running `openclaw setup`.
 
 4. **Create Shortcuts (Bash Functions & Aliases):**
 *(These create a permanent `oc` shortcut for running OpenClaw commands and an `oc-upgrade` alias for upgrading OpenClaw inside the container.)*
@@ -67,11 +67,11 @@ cat >> ~/.bashrc << 'EOF'
 
 # OpenClaw shortcuts
 oc() { docker exec -it openclaw-sandbox bash -c "export PATH=/home/node/.npm-global/bin:\$PATH && openclaw $*"; }
-alias oc-upgrade="docker exec openclaw-sandbox bash -c 'export PATH=/home/node/.npm-global/bin:\$PATH && openclaw update'"
+alias oc-upgrade="docker exec openclaw-sandbox bash -c 'export PATH=/home/node/.npm-global/bin:\$PATH && npm install -g openclaw && cd /home/node/.npm-global/lib/node_modules/openclaw && npm install grammy @grammyjs/runner @grammyjs/transformer-throttler @grammyjs/types @buape/carbon @larksuiteoapi/node-sdk @slack/web-api && openclaw doctor && openclaw gateway restart'"
 EOF
 ```
 
-> **Upgrading OpenClaw:** Since the container no longer reinstalls on every boot, run `oc-upgrade` when you want to update to the latest version. This runs `openclaw update`, which upgrades the core, syncs plugin dependencies, and restarts the gateway automatically. See [OpenClaw update docs](https://docs.openclaw.ai/install/updating) for channel/version options.
+> **Upgrading OpenClaw:** Since the container no longer reinstalls on every boot, run `oc-upgrade` when you want to update to the latest version. This runs `npm install -g openclaw`, reinstalls plugin dependencies, runs `openclaw doctor`, and restarts the gateway. **Do not use `openclaw update` directly** — it wipes plugin deps during the npm reinstall, then crashes before it can sync them back ([#52719](https://github.com/openclaw/openclaw/issues/52719)).
 
 5. **Post-Setup: Verify API Key Consistency:**
 After running `oc setup` or `oc configure`, the runtime creates `~/.openclaw/agents/main/agent/auth-profiles.json` with its own copy of your API key. Verify both files have the same key:
