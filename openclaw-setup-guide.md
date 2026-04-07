@@ -202,9 +202,9 @@ oc-upgrade
 
 ### Container boot behavior: install-once
 - The container CMD uses `command -v openclaw` to check if OpenClaw is already installed.
-- **First boot:** Installs OpenClaw and all plugin dependencies (`grammy`, `@grammyjs/runner`, `@grammyjs/transformer-throttler`, `@grammyjs/types`, `@buape/carbon`, `@larksuiteoapi/node-sdk`, `@slack/web-api`), then starts the gateway with `--allow-unconfigured`.
+- **First boot:** Installs OpenClaw and plugin dependencies via `npm install -g` + manual dep install (needed because `npm install -g openclaw` doesn't include plugin deps — see [#52719](https://github.com/openclaw/openclaw/issues/52719)), then starts the gateway with `--allow-unconfigured`.
 - **Subsequent boots:** Skips installation and starts the gateway immediately.
-- **Upgrading:** Run `oc-upgrade` to reinstall OpenClaw and all plugin dependencies. No container restart needed for most changes.
+- **Upgrading:** Run `oc-upgrade` which calls `openclaw update` — this upgrades the core, syncs plugin dependencies, runs doctor checks, and restarts the gateway automatically.
 
 ### Why not reinstall on every boot?
 The original container CMD ran `npm install -g openclaw` on every boot to auto-update. This caused recurring problems:
@@ -214,15 +214,11 @@ The original container CMD ran `npm install -g openclaw` on every boot to auto-u
 - **Network dependency:** If the npm registry was slow or down, the container couldn't start.
 
 ### Gotcha: Plugin missing dependencies
-- Several plugins require packages not bundled by `npm install -g openclaw` (npm may skip them due to peer dependency resolution):
-  - **Telegram:** `grammy`, `@grammyjs/runner`, `@grammyjs/transformer-throttler`, `@grammyjs/types`
-  - **Discord:** `@buape/carbon`
-  - **Feishu/Lark:** `@larksuiteoapi/node-sdk`
-  - **Slack:** `@slack/web-api`
-- **Symptom:** Logs show `Cannot find module '<package>'` and the gateway fails to start or the channel enters an auto-restart loop.
-- **Fix:** Run `oc-upgrade` to install all plugin dependencies. Or manually:
+- `npm install -g openclaw` does not install all plugin dependencies ([#52719](https://github.com/openclaw/openclaw/issues/52719)). This only affects first boot (the container CMD handles it manually).
+- **Symptom:** Logs show `Cannot find module '<package>'` and the gateway fails to start.
+- **Fix:** Run `oc-upgrade` (which calls `openclaw update` and syncs all plugin deps). If the CLI itself is broken, fall back to manual install:
   ```bash
-  docker exec openclaw-sandbox bash -c "cd /home/node/.npm-global/lib/node_modules/openclaw && npm install grammy @grammyjs/runner @grammyjs/transformer-throttler @grammyjs/types @buape/carbon @larksuiteoapi/node-sdk @slack/web-api"
+  docker exec openclaw-sandbox bash -c "export PATH=/home/node/.npm-global/bin:\$PATH && cd /home/node/.npm-global/lib/node_modules/openclaw && npm install grammy @grammyjs/runner @grammyjs/transformer-throttler @grammyjs/types @buape/carbon @larksuiteoapi/node-sdk @slack/web-api"
   docker restart openclaw-sandbox
   ```
 
