@@ -202,9 +202,9 @@ oc-upgrade
 
 ### Container boot behavior: install-once
 - The container CMD uses `command -v openclaw` to check if OpenClaw is already installed.
-- **First boot:** Installs OpenClaw and its Telegram dependencies (`grammy`, `@grammyjs/runner`, `@grammyjs/transformer-throttler`, `@grammyjs/types`), then starts the gateway.
+- **First boot:** Installs OpenClaw and all plugin dependencies (`grammy`, `@grammyjs/runner`, `@grammyjs/transformer-throttler`, `@grammyjs/types`, `@buape/carbon`, `@larksuiteoapi/node-sdk`, `@slack/web-api`), then starts the gateway with `--allow-unconfigured`.
 - **Subsequent boots:** Skips installation and starts the gateway immediately.
-- **Upgrading:** Run `oc-upgrade` to reinstall OpenClaw and its Telegram dependencies. No container restart needed for most changes.
+- **Upgrading:** Run `oc-upgrade` to reinstall OpenClaw and all plugin dependencies. No container restart needed for most changes.
 
 ### Why not reinstall on every boot?
 The original container CMD ran `npm install -g openclaw` on every boot to auto-update. This caused recurring problems:
@@ -213,13 +213,16 @@ The original container CMD ran `npm install -g openclaw` on every boot to auto-u
 - **Dependency loss:** Extra packages installed inside the container (like `grammy` for Telegram) were wiped on every boot by the fresh `npm install -g`.
 - **Network dependency:** If the npm registry was slow or down, the container couldn't start.
 
-### Gotcha: Telegram plugin missing dependencies
-- The Telegram plugin requires `grammy`, `@grammyjs/runner`, `@grammyjs/transformer-throttler`, and `@grammyjs/types`.
-- These are not always installed by `npm install -g openclaw` (npm may skip them due to peer dependency resolution).
-- **Symptom:** Logs show `Cannot find module 'grammy'` or `Cannot find package '@grammyjs/runner'` and Telegram enters an auto-restart loop (up to 10 attempts).
-- **Fix:** The `oc-upgrade` alias installs these explicitly. If you need to fix it manually:
+### Gotcha: Plugin missing dependencies
+- Several plugins require packages not bundled by `npm install -g openclaw` (npm may skip them due to peer dependency resolution):
+  - **Telegram:** `grammy`, `@grammyjs/runner`, `@grammyjs/transformer-throttler`, `@grammyjs/types`
+  - **Discord:** `@buape/carbon`
+  - **Feishu/Lark:** `@larksuiteoapi/node-sdk`
+  - **Slack:** `@slack/web-api`
+- **Symptom:** Logs show `Cannot find module '<package>'` and the gateway fails to start or the channel enters an auto-restart loop.
+- **Fix:** Run `oc-upgrade` to install all plugin dependencies. Or manually:
   ```bash
-  docker exec openclaw-sandbox bash -c "cd /home/node/.npm-global/lib/node_modules/openclaw && npm install grammy @grammyjs/runner @grammyjs/transformer-throttler @grammyjs/types"
+  docker exec openclaw-sandbox bash -c "cd /home/node/.npm-global/lib/node_modules/openclaw && npm install grammy @grammyjs/runner @grammyjs/transformer-throttler @grammyjs/types @buape/carbon @larksuiteoapi/node-sdk @slack/web-api"
   docker restart openclaw-sandbox
   ```
 
