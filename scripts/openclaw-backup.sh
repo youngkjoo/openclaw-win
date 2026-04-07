@@ -23,7 +23,8 @@ echo "Creating archive: $BACKUP_FILE" >> "$LOG_FILE"
     --exclude='config.json' \
     --exclude='node_modules' \
     --exclude='.npm' \
-    "$SOURCE_DIR" 2>> "$LOG_FILE"
+    --transform 's,^\.openclaw,openclaw-backup,' \
+    -C /home/young .openclaw 2>> "$LOG_FILE"
 
 if [ $? -ne 0 ]; then
     echo "ERROR: Tar command failed. Check permissions." >> "$LOG_FILE"
