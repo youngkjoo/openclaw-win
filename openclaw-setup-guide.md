@@ -271,10 +271,12 @@ OpenClaw supports multiple agents, each with its own workspace, sessions, model,
 
 ### Current agents
 
-| Agent | Telegram Bot | Role |
-|-------|-------------|------|
-| `main` | `@JooJJBot` | General assistant (default) |
-| `sysadmin` | `@DF_Sysop_Bot` | System administration, health checks, config validation |
+| Agent | Telegram Bot | Role | Heartbeat | Fallback model |
+|-------|-------------|------|-----------|----------------|
+| `main` | `@JooJJBot` | General assistant (default) | 1h | `claude-sonnet-4-6` |
+| `sysadmin` | `@DF_Sysop_Bot` | System administration, health checks, config validation | disabled | none |
+
+Both agents share a Telegram group ("DF Team") where they respond when mentioned (`@`).
 
 ### How it works
 
@@ -282,6 +284,7 @@ OpenClaw supports multiple agents, each with its own workspace, sessions, model,
 - Each agent has its own workspace under `~/.openclaw/workspace/<id>/` with a `SOUL.md` defining its personality
 - Each agent is bound to a separate Telegram bot via `bindings` in `openclaw.json`
 - The `channels.telegram.accounts` section maps account IDs to bot tokens
+- Group policy is set to `all` with `requireMention: true` — bots only respond when `@`-mentioned in groups
 
 ### Adding a new agent
 
@@ -314,6 +317,28 @@ OpenClaw supports multiple agents, each with its own workspace, sessions, model,
    ```bash
    oc pairing approve telegram <CODE>
    ```
+
+### Per-agent overrides
+
+Agents inherit from `agents.defaults`. To override for a specific agent, add keys to its entry in `agents.list`:
+- **Disable heartbeat:** `"heartbeat": { "every": "0m" }`
+- **Model without fallback:** `"model": { "primary": "google/gemini-3.1-flash-lite-preview" }`
+- **Restrict tools:** `"tools": { "allow": ["read", "exec"], "deny": ["write", "edit"] }`
+
+### Plugin ownership
+
+Plugins in `~/.openclaw/extensions/` must be owned by the same user running the gateway. If the container runs as root but plugin files are owned by uid 1000, the gateway blocks them with "suspicious ownership" warnings. Fix with:
+```bash
+docker exec openclaw-sandbox chown -R root:root /home/node/.openclaw/extensions/<plugin-name>
+```
+
+### Telegram group setup
+
+To create a shared group with multiple agents:
+1. Create a Telegram group and add all bots
+2. Make each bot a group admin (so they can read all messages)
+3. Set `groupPolicy: "all"` in `openclaw.json` under `channels.telegram`
+4. With `requireMention: true`, bots only respond when `@`-mentioned
 
 ### Key constraints
 - Never reuse `agentDir` across agents (causes auth/session collisions)
