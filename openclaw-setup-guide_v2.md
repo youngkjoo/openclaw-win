@@ -229,6 +229,12 @@ oc-upgrade
   docker run --rm --user root -v ~/.openclaw:/data alpine chown -R 1000:1000 /data
   ```
 
+### Official Chaos Testing Simulator
+- To prove your architecture can withstand catastrophic failures, we built an automated chaos-testing bash script.
+- **Run the suite:** `~/openclaw-win/scripts/chaos-test.sh`
+- **Test 1 ('Unhandled Crash'):** The script naturally assassinates (`kill -9 1`) the core node process, completely bypassing Docker's stop sequence, visually verifying whether the container seamlessly catches the orphaned unhandled-crash state and triggers the automatic `--restart always` reboot loop within seconds.
+- **Test 2 ('Nuke & Rebuild'):** The script destructively stops and drops the entire container architecture, natively boots it afresh via your docker-run image command, then continuously polls its logs to physically verify the exact moment the Telegram plugin seamlessly boots from the host.
+
 ### Gotcha: `docker restart` vs `docker stop && docker start`
 - `docker restart` preserves some in-memory state (including auth profile cooldowns).
 - `docker stop && docker start` fully clears process memory — use this after fixing auth issues.

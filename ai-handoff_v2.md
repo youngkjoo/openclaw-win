@@ -252,6 +252,7 @@ Defines the sysadmin agent as a concise, factual system administration assistant
 | `~/openclaw-win/wsl_automation_instructions.md` | N/A | Step-by-step setup instructions |
 | `~/openclaw-win/agent_onboarding.md` | N/A | Agent onboarding guide |
 | `~/keep-alive.sh` | N/A | WSL keep-alive script |
+| `~/openclaw-win/scripts/chaos-test.sh` | N/A | V2 Chaos testing destruction suite |
 | `/etc/wsl.conf` | N/A | WSL config (automount disabled) |
 | `/etc/sudoers.d/docker-service` | N/A | Passwordless sudo for Docker |
 
