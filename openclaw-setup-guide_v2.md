@@ -13,6 +13,12 @@ A living document of gotchas, configuration tips, and lessons learned from debug
 | `~/.openclaw/openclaw.json` | `/home/node/.openclaw/openclaw.json` | Main config: model selection, fallbacks, auth profiles, channels, plugins |
 | `~/.openclaw/agents/main/agent/auth-profiles.json` | `/home/node/.openclaw/agents/main/agent/auth-profiles.json` | Runtime auth state: API keys, OAuth tokens, usage stats, cooldown state |
 
+### Gotcha: v2 Docker Image Schema Updates
+- The newest v2 Docker image expects strict variable types for `openclaw.json`.
+- `channels.telegram.groupPolicy` must be `"open"` (previously `"all"`).
+- `channels.telegram.streaming` must be an object (`{ "mode": "partial" }`) rather than a simple string (`"partial"`).
+- If OpenClaw refuses to start looping `Config invalid`, simply edit `openclaw.json` or run `oc doctor --fix`.
+
 ### Gotcha: API key must be consistent across all three files
 - `config.json` stores the API key under `gemini.apiKey`.
 - `openclaw.json` declares auth profiles (e.g., `google:default` with `mode: "api_key"`).
@@ -214,6 +220,14 @@ oc-upgrade
 - **Auto-Restarts:** Because we no longer use a manual npm installation loop, if the `gateway` process crashes unexpectedly, Docker's native `--restart always` policy cleanly reboots it within a few seconds! This completely resolves overnight gateway stability bugs.
 - **Plugins:** All plugin dependencies (like Telegram's `grammy`) are securely built into the image, eliminating `Cannot find module` bugs and `chown` file permission mismatches.
 - **Config Storage:** Because OpenClaw naturally compartmentalizes its data onto the `/home/node/.openclaw` volume, upgrading images preserves all your sessions and agents organically.
+
+### Gotcha: `EACCES: permission denied` on v2 Migration
+- **Symptom:** When bootstrapping the new official image, Logs show `failed to start: Error: EACCES: permission denied` on `/home/node/.openclaw/cron/jobs.json` or config folders.
+- **Cause:** Your previous custom Docker setup ran as `root`, creating config files on your WSL host owned by `root`. The new secure official image runs purely as the unprivileged `node` user (`UID 1000`).
+- **Fix:** You must correctly grant file ownership to `UID 1000`. You can safely do this via an Alpine docker mount to bypass any WSL sudo prompts:
+  ```bash
+  docker run --rm --user root -v ~/.openclaw:/data alpine chown -R 1000:1000 /data
+  ```
 
 ### Gotcha: `docker restart` vs `docker stop && docker start`
 - `docker restart` preserves some in-memory state (including auth profile cooldowns).
