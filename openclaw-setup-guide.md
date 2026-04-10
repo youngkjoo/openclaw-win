@@ -346,8 +346,33 @@ docker exec openclaw-sandbox chown -R root:root /home/node/.openclaw/extensions/
 To create a shared group with multiple agents:
 1. Create a Telegram group and add all bots
 2. Make each bot a group admin (so they can read all messages)
-3. Set `groupPolicy: "all"` in `openclaw.json` under `channels.telegram`
+3. Set `groupPolicy: "open"` in `openclaw.json` under `channels.telegram`
 4. With `requireMention: true`, bots only respond when `@`-mentioned
+
+### Gotcha: Telegram Group `*` Wildcard Bug
+- **Symptom:** You add bots to a group, they have Admin privileges, and `groupPolicy` is `"open"`, but they silently ignore all messages including `@`-mentions.
+- **Cause:** A known bug in OpenClaw's group routing prevents the `"*"` wildcard from matching group IDs properly. If your group ID isn't explicitly listed, OpenClaw drops the message. 
+- **Fix:** You must find your group's chat ID (a negative number like `-5182129954`) and explicitly add it to the `groups` object in `openclaw.json` alongside the wildcard:
+  ```json
+  "channels": {
+    "telegram": {
+      "groupPolicy": "open",
+      "groups": {
+        "*": {
+          "requireMention": true
+        },
+        "-5182129954": {
+          "requireMention": true
+        }
+      }
+    }
+  }
+  ```
+
+### Gotcha: Broken Plugins Causing Massive Boot Delays
+- **Symptom:** You send a message right after restarting the container to test a fix, and the bot ignores you. But if you try again a minute later, it magically responds.
+- **Cause:** If a plugin fails validation (like `openclaw-agentmail-listener` missing its `apiKey`), the container's startup sequence gets paused by the Bonjour service watchdog. This causes a silent ~35 second delay where the container looks "Up", but Telegram hasn't actually started polling for messages yet.
+- **Fix:** If you see `invalid config` errors spamming your start up logs for a plugin you aren't actively using, completely disable it in `openclaw.json` under `plugins.entries.<plugin-name>.enabled: false` to restore 2-second instantaneous container booting.
 
 ### Key constraints
 - Never reuse `agentDir` across agents (causes auth/session collisions)
