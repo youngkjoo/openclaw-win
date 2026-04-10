@@ -117,17 +117,25 @@ The AgentMail WebSocket listener plugin gives your agent **real-time** email not
 oc plugins install @openclaw/agentmail-listener
 ```
 
-Configure the plugin by adding the AgentMail settings to `~/.openclaw/openclaw.json`:
+Configure the plugin by adding the AgentMail settings to `~/.openclaw/openclaw.json` under the `plugins.entries` section:
 ```json
 {
-  "extensions": {
-    "openclaw-agentmail-listener": {
-      "apiKey": "YOUR_AGENTMAIL_API_KEY",
-      "inboxes": ["myagent@agentmail.to"]
+  "plugins": {
+    "entries": {
+      "openclaw-agentmail-listener": {
+        "enabled": true,
+        "config": {
+          "apiKey": "YOUR_AGENTMAIL_API_KEY",
+          "inboxId": "myagent@agentmail.to",
+          "sessionKey": "agent:main:telegram:direct:YOUR_CHAT_ID"
+        }
+      }
     }
   }
 }
 ```
+> [!NOTE]
+> Setting `sessionKey` ensures notifications are delivered to your private DM. Your chat ID can be found in `sessions.json`.
 
 Restart the container to activate:
 ```bash
@@ -480,4 +488,10 @@ Run through this checklist to confirm your agent is fully operational:
 
 ## Troubleshooting
 
-For detailed debugging of common issues (API key mismatches, auth cooldowns, cron delivery failures, npm ENOTEMPTY errors, Docker/WSL persistence), see the [OpenClaw Setup Guide](./openclaw-setup-guide.md).
+- **Telegram Bot Not Responding in Groups?**
+  1. **Disabled Bot Privacy:** Ensure `/setprivacy` is "Disabled" in @BotFather.
+  2. **Promote to Admin:** Make the bot an administrator in the group.
+  3. **Explicit Chat ID:** If the bot still ignores mentions, add the group's explicit ID to `openclaw.json` (e.g., `-123456789`) as the wildcard `"*"` can sometimes fail.
+  4. **Wake Up Connection:** Send `/start@BotUsername` directly in the group.
+
+For more detailed debugging of common issues (API key mismatches, auth cooldowns, cron delivery failures, npm ENOTEMPTY errors, Docker/WSL persistence), see the [OpenClaw Setup Guide](./openclaw-setup-guide.md).
