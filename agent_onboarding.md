@@ -37,6 +37,7 @@ Give your agent its own Google account so it never touches your personal data.
    ```
    My Drive/
    ├── openclaw-backups/     # Automated backup storage
+   ├── antigravity-backups/  # Gemini Antigravity conversation backups
    ├── shared-documents/     # Files shared between you and the agent
    └── agent-workspace/      # Agent's working files
    ```
@@ -68,27 +69,42 @@ Give your agent its own Google account so it never touches your personal data.
    You should see the folders you created. *(Note: use `lsd` not `ls` — `ls` only lists files, not empty folders!)*
 
 ### 2d. Automate Daily Backups
-To ensure complete backups of the OpenClaw configuration and data, use the snapshot scripts located in `~/openclaw-win/scripts/`.
+Two backup jobs run on cron: one for OpenClaw config/data, one for Gemini Antigravity conversations. Scripts live in `~/openclaw-win/scripts/`; all logs go to `~/.config/rclone/logs/`.
 
-1. Ensure the scripts have execute permissions:
+1. Create the log directory and ensure scripts are executable:
    ```bash
+   mkdir -p ~/.config/rclone/logs
    chmod +x ~/openclaw-win/scripts/openclaw-backup.sh
    chmod +x ~/openclaw-win/scripts/backup-check.sh
+   chmod +x ~/openclaw-win/scripts/antigravity-backup.sh
+   chmod +x ~/openclaw-win/scripts/antigravity-backup-check.sh
    ```
 
-2. Add cron jobs for the daily scheduled backup and the catch-up check (to handle missed backups if your laptop falls asleep):
+2. Add cron jobs for both daily scheduled backups and their catch-up checks (catch-up handles missed runs if the laptop was asleep at the scheduled time):
    ```bash
    crontab -e
    ```
    Add:
    ```cron
    # OpenClaw Snapshot Backups
-   # Daily backup at 3am — excludes config.json for security
-   0 3 * * * ~/openclaw-win/scripts/openclaw-backup.sh >> ~/.openclaw/backup-cron.log 2>&1
-   
+   # Daily backup at 3:00am — excludes config.json for security
+   0 3 * * * ~/openclaw-win/scripts/openclaw-backup.sh >> ~/.config/rclone/logs/openclaw-backup-cron.log 2>&1
    # Hourly catch-up check (runs backup if laptop was asleep during 3am)
-   0 * * * * ~/openclaw-win/scripts/backup-check.sh >> ~/.openclaw/backup-check.log 2>&1
+   0 * * * * ~/openclaw-win/scripts/backup-check.sh >> ~/.config/rclone/logs/openclaw-backup-check.log 2>&1
+
+   # Antigravity Snapshot Backups (staggered 15 min after OpenClaw to avoid simultaneous uploads)
+   # Daily backup at 3:15am
+   15 3 * * * ~/openclaw-win/scripts/antigravity-backup.sh >> ~/.config/rclone/logs/antigravity-backup-cron.log 2>&1
+   # Hourly catch-up check
+   15 * * * * ~/openclaw-win/scripts/antigravity-backup-check.sh >> ~/.config/rclone/logs/antigravity-backup-check.log 2>&1
    ```
+
+   **Log files** (all under `~/.config/rclone/logs/`):
+   - `openclaw-backup.log` / `antigravity-backup.log` — per-run detail written by each script
+   - `*-backup-cron.log` — daily cron stdout/stderr
+   - `*-backup-check.log` — hourly catch-up cron stdout/stderr
+
+   **Success markers** (timestamps, not logs): `~/.openclaw/last_backup_success` and `~/.gemini/antigravity/last_backup_success`
 
 > [!IMPORTANT]
 > Since the Docker container writes log files as `root` inside the `~/.openclaw/` directory, you must run `sudo chown -R $USER:$USER ~/.openclaw/` periodically or whenever new agents are created, otherwise the `tar` backup command will fail with a "Permission denied" error.
