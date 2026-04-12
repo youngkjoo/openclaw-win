@@ -9,7 +9,7 @@ REMOTE_NAME="agent-drive"
 REMOTE_PATH="antigravity-backups/snapshots"
 TIMESTAMP=$(date +%Y%m%d)
 BACKUP_FILE="/tmp/antigravity-snapshot-${TIMESTAMP}.tar.gz"
-LOG_FILE="/home/young/.config/rclone/logs/antigravity-backup.log"
+LOG_FILE="/home/young/.openclaw/logs/antigravity-backup.log"
 
 # Ensure we have access to the rclone config
 export PATH="/usr/bin:/usr/local/bin:$PATH"

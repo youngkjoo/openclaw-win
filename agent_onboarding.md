@@ -69,11 +69,11 @@ Give your agent its own Google account so it never touches your personal data.
    You should see the folders you created. *(Note: use `lsd` not `ls` — `ls` only lists files, not empty folders!)*
 
 ### 2d. Automate Daily Backups
-Two backup jobs run on cron: one for OpenClaw config/data, one for Gemini Antigravity conversations. Scripts live in `~/openclaw-win/scripts/`; all logs go to `~/.config/rclone/logs/`.
+Two backup jobs run on cron: one for OpenClaw config/data, one for Gemini Antigravity conversations. Scripts live in `~/openclaw-win/scripts/`; all logs go to `~/.openclaw/logs/`.
 
 1. Create the log directory and ensure scripts are executable:
    ```bash
-   mkdir -p ~/.config/rclone/logs
+   mkdir -p ~/.openclaw/logs
    chmod +x ~/openclaw-win/scripts/openclaw-backup.sh
    chmod +x ~/openclaw-win/scripts/backup-check.sh
    chmod +x ~/openclaw-win/scripts/antigravity-backup.sh
@@ -88,18 +88,18 @@ Two backup jobs run on cron: one for OpenClaw config/data, one for Gemini Antigr
    ```cron
    # OpenClaw Snapshot Backups
    # Daily backup at 3:00am — excludes config.json for security
-   0 3 * * * ~/openclaw-win/scripts/openclaw-backup.sh >> ~/.config/rclone/logs/openclaw-backup-cron.log 2>&1
+   0 3 * * * ~/openclaw-win/scripts/openclaw-backup.sh >> ~/.openclaw/logs/openclaw-backup-cron.log 2>&1
    # Hourly catch-up check (runs backup if laptop was asleep during 3am)
-   0 * * * * ~/openclaw-win/scripts/backup-check.sh >> ~/.config/rclone/logs/openclaw-backup-check.log 2>&1
+   0 * * * * ~/openclaw-win/scripts/backup-check.sh >> ~/.openclaw/logs/openclaw-backup-check.log 2>&1
 
    # Antigravity Snapshot Backups (staggered 15 min after OpenClaw to avoid simultaneous uploads)
    # Daily backup at 3:15am
-   15 3 * * * ~/openclaw-win/scripts/antigravity-backup.sh >> ~/.config/rclone/logs/antigravity-backup-cron.log 2>&1
+   15 3 * * * ~/openclaw-win/scripts/antigravity-backup.sh >> ~/.openclaw/logs/antigravity-backup-cron.log 2>&1
    # Hourly catch-up check
-   15 * * * * ~/openclaw-win/scripts/antigravity-backup-check.sh >> ~/.config/rclone/logs/antigravity-backup-check.log 2>&1
+   15 * * * * ~/openclaw-win/scripts/antigravity-backup-check.sh >> ~/.openclaw/logs/antigravity-backup-check.log 2>&1
    ```
 
-   **Log files** (all under `~/.config/rclone/logs/`):
+   **Log files** (all under `~/.openclaw/logs/`):
    - `openclaw-backup.log` / `antigravity-backup.log` — per-run detail written by each script
    - `*-backup-cron.log` — daily cron stdout/stderr
    - `*-backup-check.log` — hourly catch-up cron stdout/stderr

@@ -9,7 +9,7 @@ REMOTE_NAME="agent-drive"
 REMOTE_PATH="openclaw-backups/snapshots"
 TIMESTAMP=$(date +%Y%m%d)
 BACKUP_FILE="/tmp/openclaw-snapshot-${TIMESTAMP}.tar.gz"
-LOG_FILE="/home/young/.config/rclone/logs/openclaw-backup.log"
+LOG_FILE="/home/young/.openclaw/logs/openclaw-backup.log"
 
 # Ensure we have access to the rclone config
 export PATH="/usr/bin:/usr/local/bin:$PATH"
