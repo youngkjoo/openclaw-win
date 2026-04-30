@@ -131,4 +131,7 @@ crontab ~/openclaw-cron-backup.txt
 Unlike WSL which needed a complex scheduled `keep-alive.sh` task, your Mac Mini just needs to stay awake physically:
 - Go to **System Settings** -> **Displays** -> **Advanced...** (or **Energy Saver**) and turn on **"Prevent automatic sleeping when the display is off"**.
 
+### 10. Apply Advanced Security Hardening
+Before declaring the migration complete, please strictly follow the **[Mac Security Hardening Guide](./mac_security_hardening.md)** to lock down your macOS firewall, encrypt your disk, restrict Docker file sharing, and close Telegram policy loopholes.
+
 You can verify OpenClaw is running healthy by checking `docker ps` and testing both your `@JooJJBot` (main) and `@DF_Sysop_Bot` (sysadmin) Telegram bots!
