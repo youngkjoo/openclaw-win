@@ -50,23 +50,25 @@ scp <wsl_username>@<wsl_ip_address>:~/openclaw-migration.tar.gz ~/
 
 macOS has different underlying tooling, paths, and permissions compared to Ubuntu/WSL. Follow these steps carefully on the Mac to preserve your strict security posture.
 
-### 1. Setup Docker Desktop & Preserve the Sandbox (CRITICAL)
+### 1. Setup Docker Desktop on a Standard Account (CRITICAL)
 On Windows, you deliberately avoided Docker Desktop to keep your `C:\` drive physically isolated from the container. On macOS, Docker Desktop is required, but it shares your entire home directory by default!
 
-1. Download and install [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/). **Do not use the Linux `get-docker.sh` script.**
-2. **Maintain the Air-Gap:** Open Docker Desktop -> **Settings** -> **Resources** -> **File sharing**.
+Because you created a dedicated, non-admin standard account for OpenClaw, you must handle the installation carefully:
+1. **Log in as your Mac Admin user** to download and install [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/). Run it once as the admin to install the underlying networking/daemon tools (it will prompt for your admin password).
+2. **Switch back to your OpenClaw standard user account**.
+3. Launch Docker Desktop from the Applications folder. (It may prompt for admin credentials one final time to create symlinks like `/usr/local/bin/docker`).
+4. **Maintain the Air-Gap:** Open Docker Desktop -> **Settings** -> **Resources** -> **File sharing**.
    - Remove all default paths (like `/Users`, `/Volumes`, `/tmp`).
-   - Add **only** your specific OpenClaw data path: `/Users/<your-mac-username>/.openclaw`.
-3. **Hardware Resource Limits:** The strict 12GB RAM cap you used on Windows was necessary due to a severe WSL2 disk caching bug (`vmmem`). On an Apple Silicon Mac, Docker uses the highly optimized Apple Virtualization Framework which manages memory dynamically. Because OpenClaw is lightweight (< 300MB RAM), **you can safely leave Docker Desktop on its default resource settings** (unless you plan to run heavy local LLMs like Ollama inside Docker later).
+   - Add **only** your specific OpenClaw data path: `/Users/<your-standard-username>/.openclaw`.
+5. **Hardware Resource Limits:** The strict 12GB RAM cap you used on Windows was necessary due to a severe WSL2 disk caching bug (`vmmem`). On an Apple Silicon Mac, Docker uses the highly optimized Apple Virtualization Framework which manages memory dynamically. Because OpenClaw is lightweight (< 300MB RAM), **you can safely leave Docker Desktop on its default resource settings** (unless you plan to run heavy local LLMs like Ollama inside Docker later).
 
 ### 2. Install Additional Mac Dependencies
-If you don't have Homebrew installed, open macOS Terminal and run:
-`/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
-
-macOS comes with BSD `tar`, but your backup scripts rely on GNU `tar` extensions (like `--transform`). Install GNU Tar and rclone:
+Because your OpenClaw account is a standard user, you might not have permission to install Homebrew globally. 
+The easiest way is to **log into your Admin account**, open the Terminal, install Homebrew, and then run:
 ```bash
 brew install rclone gnu-tar
 ```
+Once installed by the Admin, your standard user will be able to successfully access `/opt/homebrew/bin/rclone` and `/opt/homebrew/bin/gtar` for the automated backups.
 
 ### 3. Extract the Archive
 Place `openclaw-migration.tar.gz` in your Mac's Home folder (`~/`), then extract it:
@@ -117,7 +119,7 @@ To verify the migration was flawless, simply run `docker logs openclaw-sandbox`.
 ### 7. Grant macOS Cron Permissions
 macOS privacy settings block `cron` from reading the Documents, Desktop, and Home folders by default. Your automated backups will fail if you skip this step.
 1. Open **System Settings** -> **Privacy & Security** -> **Full Disk Access**.
-2. Click the `+` button.
+2. Click the `+` button. *(You will need to authenticate with your Admin credentials to unlock this menu)*.
 3. Press `Cmd + Shift + G` and type `/usr/sbin/cron`, then select the `cron` executable.
 4. Ensure the toggle next to `cron` is turned on.
 
