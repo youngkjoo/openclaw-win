@@ -63,12 +63,18 @@ Because you created a dedicated, non-admin standard account for OpenClaw, you mu
 5. **Hardware Resource Limits:** The strict 12GB RAM cap you used on Windows was necessary due to a severe WSL2 disk caching bug (`vmmem`). On an Apple Silicon Mac, Docker uses the highly optimized Apple Virtualization Framework which manages memory dynamically. Because OpenClaw is lightweight (< 300MB RAM), **you can safely leave Docker Desktop on its default resource settings** (unless you plan to run heavy local LLMs like Ollama inside Docker later).
 
 ### 2. Install Additional Mac Dependencies
-Because your OpenClaw account is a standard user, you might not have permission to install Homebrew globally. 
-The easiest way is to **log into your Admin account**, open the Terminal, install Homebrew, and then run:
+Because your OpenClaw account is a standard user, Homebrew will aggressively reject installation attempts (throwing `/opt/homebrew` directory ownership errors). Do **not** attempt to run `sudo chown` as the standard user!
+
+Instead, follow this exact sequence:
+1. Log completely out of your standard account and **log into your Mac Admin account** (e.g., `youngjoo`).
+2. Open the Terminal as the Admin and install Homebrew if you haven't already.
+3. Run this command to install the dependencies system-wide:
 ```bash
 brew install rclone gnu-tar
 ```
-Once installed by the Admin, your standard user will be able to successfully access `/opt/homebrew/bin/rclone` and `/opt/homebrew/bin/gtar` for the automated backups.
+4. Once finished, log back into your OpenClaw standard account. 
+
+Your backup scripts will now be able to silently access these tools at `/opt/homebrew/bin/rclone` and `/opt/homebrew/bin/gtar` without triggering any permission errors.
 
 ### 3. Extract the Archive
 Place `openclaw-migration.tar.gz` in your Mac's Home folder (`~/`), then extract it:
