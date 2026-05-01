@@ -42,7 +42,7 @@ Run this exact command in your **WSL terminal**:
 rclone copy ~/openclaw-migration.tar.gz agent-drive:openclaw-backups/migration/
 ```
 
-Then, simply open a web browser on your **Mac Mini**, log into your Google Drive, navigate to the `openclaw-backups/migration/` folder, and download `openclaw-migration.tar.gz` to your Mac's Home folder (`~/`).
+Then, **log into your OpenClaw standard account** on the Mac Mini, open a web browser, log into your Google Drive, navigate to the `openclaw-backups/migration/` folder, and download `openclaw-migration.tar.gz` to your standard user's Home folder (`~/`).
 
 ---
 
