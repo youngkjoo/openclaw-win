@@ -21,14 +21,13 @@ crontab -l > ~/openclaw-cron-backup.txt
 ```
 
 ### 3. Create the Complete Migration Archive
-Run this command in WSL to bundle your OpenClaw configurations, runtime data, backup scripts, your `rclone` Google Drive tokens, and your Gemini CLI credentials:
+Run this command in WSL to bundle your OpenClaw configurations, runtime data, backup scripts, and your `rclone` Google Drive tokens:
 ```bash
 tar -czvf ~/openclaw-migration.tar.gz \
   -C /home/young \
   .openclaw \
   openclaw-win \
   .config/rclone \
-  .config/geminiacli \
   openclaw-cron-backup.txt
 ```
 *(Note: Because we are copying the entire `~/.openclaw` directory, both your `main` and `sysadmin` agents, along with their respective Telegram bot bindings and `auth-profiles.json`, will migrate together seamlessly.)*
