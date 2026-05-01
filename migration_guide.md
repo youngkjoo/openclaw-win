@@ -32,16 +32,17 @@ tar -czvf ~/openclaw-migration.tar.gz \
 ```
 *(Note: Because we are copying the entire `~/.openclaw` directory, both your `main` and `sysadmin` agents, along with their respective Telegram bot bindings and `auth-profiles.json`, will migrate together seamlessly.)*
 
-> [!IMPORTANT]
-> The resulting `~/openclaw-migration.tar.gz` file contains highly sensitive information, including your Gemini API Keys, Telegram Bot tokens, and Google Drive access tokens. Transfer it securely via a USB drive or local network transfer (`scp`) to your Mac Mini.
+### 4. Transfer the Archive (via Google Drive)
+Because Windows WSL runs behind an internal virtual network, transferring files directly via local `scp` can be highly problematic (often resulting in `Connection reset by peer` errors).
 
-Since you have SSH access to both machines, you can securely transfer the archive directly over your local network using `scp`. 
+The most seamless and foolproof method is to use the `rclone` tool that is already perfectly configured on your WSL machine to push the archive to your Google Drive!
 
-Run this command from your **Mac Mini** terminal to pull the file directly from the WSL machine:
+Run this exact command in your **WSL terminal**:
 ```bash
-scp <wsl_username>@<wsl_ip_address>:~/openclaw-migration.tar.gz ~/
+rclone copy ~/openclaw-migration.tar.gz agent-drive:openclaw-backups/migration/
 ```
-*(Alternatively, you can run `scp ~/openclaw-migration.tar.gz <mac_username>@<mac_ip_address>:~/` from your WSL machine to push it to the Mac.)*
+
+Then, simply open a web browser on your **Mac Mini**, log into your Google Drive, navigate to the `openclaw-backups/migration/` folder, and download `openclaw-migration.tar.gz` to your Mac's Home folder (`~/`).
 
 ---
 
