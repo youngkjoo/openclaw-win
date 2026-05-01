@@ -9,8 +9,7 @@ Here is a checklist of advanced macOS and OpenClaw configurations to achieve a h
 ### Enable the macOS Application Firewall
 OpenClaw uses **outbound polling** to communicate with Telegram, meaning it requires absolutely **zero** inbound open network ports. 
 - Go to **System Settings** -> **Network** -> **Firewall** and turn it **ON**.
-- Click **Options...** and enable **"Block all incoming connections"**. 
-- This makes your Mac Mini virtually invisible and impenetrable to other devices on your local network.
+- *(Note: Do **NOT** click "Block all incoming connections" in the Options menu if you are managing this Mac Mini headlessly via SSH! That setting will completely block your ability to SSH into the machine. Simply turning the Firewall toggle to "ON" is enough to block unauthorized ports while keeping your explicitly enabled Sharing Services like SSH alive).*
 
 ### Turn on FileVault (Full Disk Encryption)
 Your `~/.openclaw/config.json` contains plaintext API keys. If someone were to physically steal your Mac Mini, they could easily extract the hard drive to read those keys.
