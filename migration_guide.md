@@ -83,10 +83,14 @@ cd ~
 tar -xzvf ~/openclaw-migration.tar.gz -C ~/
 ```
 
-### 4. Update File Paths & Scripts (CRITICAL)
-Your WSL home directory was `/home/young`, but your Mac home directory is `/Users/<your-mac-username>`. **You must update all hardcoded paths.**
+### 4. Update File Paths & OpenClaw Configuration (CRITICAL)
+Your WSL home directory was `/home/young`, but your Mac home directory is `/Users/<your-standard-username>`. **You must update all hardcoded paths.**
 
-1. **Edit Backup Scripts**: Open `~/openclaw-win/scripts/openclaw-backup.sh` (and `antigravity-backup.sh` if used).
+1. **Fix macOS Network Binding:** Apple Silicon Macs sometimes struggle with Docker's IPv6 loopback routing, which can cause the OpenClaw API gateway to silently hang on boot.
+   - Open `~/.openclaw/openclaw.json` in a text editor.
+   - Find the `"gateway"` section (around line 120) and change `"bind": "loopback"` to `"bind": "all"`. *(This is completely safe because the Mac Firewall is active and the port is not exposed to the LAN).*
+
+2. **Edit Backup Scripts**: Open `~/openclaw-win/scripts/openclaw-backup.sh` (and `antigravity-backup.sh` if used).
    - Change `SOURCE_DIR="/home/young/.openclaw"` to `/Users/<your-mac-username>/.openclaw`
    - Change `LOG_FILE="/home/young/.openclaw/...` to `/Users/<your-mac-username>/.openclaw/...`
    - Change `/usr/bin/tar` to the GNU tar installed by Homebrew: `/opt/homebrew/bin/gtar` (or `/usr/local/bin/gtar` on Intel Macs).
@@ -120,7 +124,19 @@ docker run -d \
   -e HOME=/home/node \
   ghcr.io/openclaw/openclaw:latest
 ```
-To verify the migration was flawless, simply run `docker logs openclaw-sandbox`. If you see `[telegram] [main] starting provider`, the container has successfully reattached to your memories and state.
+
+**Run the OpenClaw Doctor (Crucial for Upgrades):**
+Because you are moving to the `latest` image version, you must let OpenClaw internally normalize its plugins and cron database to prevent the boot process from hanging:
+```bash
+docker exec -it openclaw-sandbox openclaw doctor --fix
+docker restart openclaw-sandbox
+```
+
+To verify the migration was flawless, follow the live logs:
+```bash
+docker logs -f openclaw-sandbox
+```
+Wait a few seconds for the line `[telegram] [default] starting provider (@JooJJBot)`. If you see that, the container has successfully reattached to your memories and state!
 
 ### 7. Grant macOS Cron Permissions
 macOS privacy settings block `cron` from reading the Documents, Desktop, and Home folders by default. Your automated backups will fail if you skip this step.
