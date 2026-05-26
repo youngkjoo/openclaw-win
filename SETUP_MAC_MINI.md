@@ -476,6 +476,25 @@ Ensure every cron job utilizes **isolated sessions** routed explicitly to your T
 }
 ```
 
+### 5. Private Git Workspace Backup
+Because your agent workspace contains sensitive memories, custom skills, daily logs, and configuration maps, it should be backed up regularly to a **private** Git repository to prevent data loss.
+
+1. **Staging & Storing Workspace**: The workspace files are stored under `/Users/dfadmin/.openclaw/workspace`. We have initialized this as a Git repository, staged the active agent files (ignoring `.DS_Store` and other OS-level files), and committed the first revision.
+2. **Wiring a Remote**: Create a **private** repository on your preferred provider (GitHub/GitLab) without initializing it with a README.
+3. **Register and Push (Run on Mac Mini host)**:
+   ```bash
+   cd ~/.openclaw/workspace
+   git remote add origin <your-private-git-repo-url>
+   git push -u origin main
+   ```
+4. **Subsequent Backups**: To back up memory files as your agent operates:
+   ```bash
+   cd ~/.openclaw/workspace
+   git add .
+   git commit -m "Update memory logs"
+   git push
+   ```
+
 ---
 
 ## Phase 7: Gotchas, Troubleshooting & Chaos Testing
