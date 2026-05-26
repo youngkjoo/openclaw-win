@@ -56,13 +56,13 @@ On macOS, Homebrew is installed in user-space. Because your OpenClaw account is 
   ```
 
 ### 2. Install Required Tools
-Run the following system-wide Homebrew commands as Admin to install essential OpenClaw dependency tools:
+Run the following Homebrew commands under the Homebrew-owning user account (`youngjoo`) to install essential OpenClaw dependency and automation tools:
 ```bash
-brew install rclone gnu-tar jq
+brew install rclone gnu-tar jq gh
 ```
 *Note:*
 * macOS's default `tar` utility is BSD-based. OpenClaw backup scripts rely on **GNU Tar** (`gtar`) for advanced path exclusions.
-* The standard user will access these tools at `/opt/homebrew/bin/rclone` and `/opt/homebrew/bin/gtar`.
+* The standard user will access these tools at `/opt/homebrew/bin/rclone`, `/opt/homebrew/bin/gtar`, and `/opt/homebrew/bin/gh`.
 
 ---
 
