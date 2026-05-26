@@ -134,6 +134,11 @@ oc() { openclaw "$@"; }
 ### 2. Configuration: `openclaw.json` (`~/.openclaw/openclaw.json`)
 Configure your `/Users/dfadmin/.openclaw/openclaw.json` exactly as follows. All paths are resolved to `/Users/dfadmin/` and network bindings are secured.
 
+> [!IMPORTANT]
+> **Ollama Network Binding (Bare Metal vs. Docker)**:
+> * **Bare Metal (Active)**: In `models.providers.ollama.baseUrl`, you **must** use `"http://127.0.0.1:11434"`. This routes local LLM queries directly via your host's native loopback port.
+> * **Docker (Legacy/Rollback)**: The container used `"http://host.docker.internal:11434"`. Using `host.docker.internal` on bare metal will fail immediately with `getaddrinfo ENOTFOUND host.docker.internal` because it is a virtual hostname that only exists inside Docker's network bridge.
+
 ```json
 {
   "auth": {
