@@ -252,7 +252,8 @@ Configure your `/Users/dfadmin/.openclaw/openclaw.json` exactly as follows. All 
       },
       "workspace": "/Users/dfadmin/.openclaw/workspace",
       "compaction": {
-        "mode": "safeguard"
+        "mode": "safeguard",
+        "reserveTokensFloor": 20000
       },
       "heartbeat": {
         "every": "1h",
