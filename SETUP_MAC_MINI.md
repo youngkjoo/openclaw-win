@@ -95,21 +95,64 @@ To have OpenClaw start up automatically at boot without *ever* logging in, it wo
 
 ---
 
-## Phase 3: Ollama Local AI Model Setup
+## Phase 3: Ollama Local AI Model Setup & launchd Daemon
 
-Ollama runs locally on the host's Apple Silicon GPU. It is installed and run in user-space under the **`dfadmin`** account.
+Ollama runs locally on the host's Apple Silicon GPU. It is installed and run in user-space as a native background **LaunchAgent** under the **`dfadmin`** account.
 
-### 1. Start Ollama
-Start Ollama under the `dfadmin` account:
-```bash
-mkdir -p ~/.ollama
-OLLAMA_HOST=127.0.0.1 OLLAMA_FLASH_ATTENTION="1" OLLAMA_KV_CACHE_TYPE="q8_0" nohup /opt/homebrew/bin/ollama serve > ~/.ollama/ollama.log 2>&1 &
+### 1. Register the Ollama LaunchAgent Daemon
+To ensure Ollama starts automatically at login with strict loopback binding and full hardware acceleration enabled, register it as a native macOS LaunchAgent:
+
+1. Create the plist configuration at `/Users/dfadmin/Library/LaunchAgents/ai.openclaw.ollama.plist`:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>ai.openclaw.ollama</string>
+    <key>Comment</key>
+    <string>OpenClaw Ollama Local LLM Server</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/opt/homebrew/bin/ollama</string>
+      <string>serve</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>OLLAMA_HOST</key>
+      <string>127.0.0.1</string>
+      <key>OLLAMA_FLASH_ATTENTION</key>
+      <string>1</string>
+      <key>OLLAMA_KV_CACHE_TYPE</key>
+      <string>q8_0</string>
+      <key>HOME</key>
+      <string>/Users/dfadmin</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/dfadmin/Library/Logs/openclaw/ollama.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dfadmin/Library/Logs/openclaw/ollama.err.log</string>
+    <key>WorkingDirectory</key>
+    <string>/Users/dfadmin</string>
+  </dict>
+</plist>
 ```
-* Note: Ollama is bound strictly to `127.0.0.1` (loopback only) since it is running on the same host as the OpenClaw service, eliminating any external network exposure.
-* `OLLAMA_FLASH_ATTENTION="1"`: Speeds up local model token generation.
-* `OLLAMA_KV_CACHE_TYPE="q8_0"`: Uses 8-bit quantized caching, cutting memory consumption in half.
 
-### 2. Pull Local Models
+2. Bootstrap and start the Ollama background daemon:
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.openclaw.ollama.plist
+```
+
+### 2. GPU Optimizations Explained
+* **`OLLAMA_HOST="127.0.0.1"`**: Binds Ollama strictly to loopback, blocking any network exposure.
+* **`OLLAMA_FLASH_ATTENTION="1"`**: Accelerates Metal GPU parallel token generation.
+* **`OLLAMA_KV_CACHE_TYPE="q8_0"`**: Uses highly optimized 8-bit quantized caching, cutting memory consumption in half without loss in precision.
+
+### 3. Pull Local Models
 Download the primary model and local fallback:
 ```bash
 /opt/homebrew/bin/ollama pull qwen3.5:9b
