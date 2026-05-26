@@ -105,6 +105,9 @@ Key adjustments applied:
         },
         "ollama/gemma4:e4b": {
           "alias": "gemma4"
+        },
+        "google/gemini-3.1-pro": {
+          "alias": "pro"
         }
       }
     }
@@ -181,4 +184,5 @@ ollama/qwen3.5:9b                          text       195k        no    yes   de
 ollama/gemma4:e4b                          text       195k        no    yes   fallback#1,configured,alias:gemma4
 google/gemini-3.5-flash                    text       195k        no    yes   fallback#2
 anthropic/claude-sonnet-4-6                text+image 195k        no    yes   fallback#3,configured,alias:sonnet
+google/gemini-3.1-pro                      text+image 1000k       no    yes   configured,alias:pro
 ```
