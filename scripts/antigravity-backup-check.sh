@@ -4,8 +4,8 @@
 # Checks if the last successful backup was more than 24 hours ago.
 # If so, triggers a new backup.
 
-SUCCESS_MARKER="/home/young/.gemini/antigravity/last_backup_success"
-BACKUP_SCRIPT="/home/young/openclaw-win/scripts/antigravity-backup.sh"
+SUCCESS_MARKER="/Users/dfadmin/.gemini/antigravity/last_backup_success"
+BACKUP_SCRIPT="/Users/dfadmin/openclaw-win/scripts/antigravity-backup.sh"
 
 # If the marker doesn't exist, run the backup
 if [ ! -f "$SUCCESS_MARKER" ]; then

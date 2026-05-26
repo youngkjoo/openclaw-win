@@ -1,146 +1,123 @@
 # Comprehensive Guide: OpenClaw Setup, Security Hardening & Maintenance on Apple Silicon Mac Mini
 
-This guide serves as a single, comprehensive, step-by-step instruction manual to install, configure, secure, and maintain your exact OpenClaw environment on a new Apple Silicon Mac Mini host. It consolidates all system architecture, dependencies, local AI model setups, multi-agent configurations, troubleshooting gotchas, and advanced security practices into a single workflow.
+This guide serves as a single, comprehensive, step-by-step instruction manual to install, configure, secure, and maintain your exact OpenClaw environment running **"bare metal"** directly on a new Apple Silicon Mac Mini host. It preserves 100% of your histories, configurations, and memories, while introducing strict, host-level security controls, correcting broken automated backup paths, and configuring local LLMs.
 
 ---
 
 ## Table of Contents
 1. [Phase 0: macOS Host Preparation & OS Hardening](#phase-0-macos-host-preparation--os-hardening)
 2. [Phase 1: Homebrew & Tooling Dependencies](#phase-1-homebrew--tooling-dependencies)
-3. [Phase 2: Docker Desktop & Isolated Sandboxing](#phase-2-docker-desktop--isolated-sandboxing)
+3. [Phase 2: Bare-Metal Background Daemon (launchd) Setup](#phase-2-bare-metal-background-daemon-launchd-setup)
 4. [Phase 3: Ollama Local AI Model Setup](#phase-3-ollama-local-ai-model-setup)
-5. [Phase 4: OpenClaw Configurations & Mappings](#phase-4-openclaw-configurations--mappings)
-6. [Phase 5: VFS Mount EPERM Patch for Command Runner](#phase-5-vfs-mount-eperm-patch-for-command-runner)
-7. [Phase 6: Backup Schedules & Host Cron Permissions](#phase-6-backup-schedules--host-cron-permissions)
-8. [Phase 7: Gotchas, Troubleshooting & Chaos Testing](#phase-7-gotchas-troubleshooting--chaos-testing)
+5. [Phase 4: Bare-Metal OpenClaw Configuration Mappings](#phase-4-bare-metal-openclaw-configuration-mappings)
+6. [Phase 5: Advanced Security Hardening & Execution Policies](#phase-5-advanced-security-hardening--execution-policies)
+7. [Phase 6: Backup Schedules, Crontabs & Private Git Backup](#phase-6-backup-schedules-crontabs--private-git-backup)
+8. [Phase 7: Troubleshooting, Gotchas & Lossless Rollback Plan](#phase-7-troubleshooting-gotchas--lossless-rollback-plan)
 
 ---
 
 ## Phase 0: macOS Host Preparation & OS Hardening
 
-OpenClaw runs autonomously and holds the keys to cloud LLM billing accounts and local command execution. Keeping the host operating system strictly secured is critical.
+Running OpenClaw bare metal directly on the host machine demands strict security measures to protect your local filesystem and API keys.
 
 ### 1. Dual-User Account Workflow
-Do **not** run OpenClaw under an Administrator account. 
-- Create a dedicated **Standard User** (e.g., `youngjoo` or `openclaw`) for running the OpenClaw service and local Ollama runtime.
-- Use your separate **Administrator User** (e.g., `dfadmin`) solely for managing system-wide apps, privileges, and the Docker daemon.
+Do **not** run OpenClaw under an Administrator account.
+* **Standard User Account (`dfadmin`)**: This is the standard, completely unprivileged user account. OpenClaw runs entirely under this session. Even if an agent or skill is ever compromised, it has zero administrative system access.
+* **Administrator User Account (`youngjoo`)**: Use this account solely for system maintenance, package updates (e.g. global npm packages, Homebrew taps), and managing elevated privileges. 
 
 ### 2. Enable macOS Application Firewall
-OpenClaw uses **outbound polling** (WebSockets) to talk to Telegram and external APIs, meaning it requires **zero open inbound network ports**.
-- Log in as your Admin user, navigate to **System Settings > Network > Firewall**, and toggle it **ON**.
-- *Important:* Do **NOT** click "Block all incoming connections" in the Options menu if you are managing the Mac Mini headlessly via SSH, as this will lock out your SSH session. Turning the Firewall ON keeps your explicitly allowed Sharing services (SSH) active while blocking unauthorized inbound ports.
+OpenClaw uses **outbound polling** (WebSockets) to talk to Telegram and external APIs, requiring **zero inbound network ports** from the LAN.
+* Navigate to **System Settings > Network > Firewall** under the `youngjoo` account and toggle it **ON**.
+* *Important:* Keep SSH active for headless administration but block all other incoming traffic.
 
 ### 3. Restrict SSH & Sharing Services
 1. Go to **System Settings > General > Sharing**.
 2. Toggle **OFF** all unused sharing options (File Sharing, Screen Sharing, Remote Management).
-3. If you use **Remote Login (SSH)**, click the info `(i)` button next to it. Set **"Allow access for:"** to **"Only these users:"** and explicitly whitelist only your **Admin account**. *Do not allow the restricted OpenClaw Standard user to SSH into the machine.*
+3. Under **Remote Login (SSH)**, set **"Allow access for:"** to **"Only these users:"** and explicitly whitelist the `youngjoo` admin account. *Do not allow the unprivileged `dfadmin` account to establish remote SSH shell connections directly.*
 
 ### 4. Turn on FileVault (Full Disk Encryption)
-Your config files store plaintext API keys. To prevent physical data extraction if the Mac Mini is stolen:
-- Go to **System Settings > Privacy & Security > FileVault** and toggle it **ON**.
-
-### 5. Disable System Sleep
-Ensure the Mac Mini remains awake to process background cron jobs and Telegram queries:
-- Go to **System Settings > Displays > Advanced...** (or **Energy Saver**) and toggle on **"Prevent automatic sleeping when the display is off"**.
+Plaintext API keys and database records are stored in your home directory. Protect against physical data extraction:
+* Go to **System Settings > Privacy & Security > FileVault** and toggle it **ON**.
 
 ---
 
 ## Phase 1: Homebrew & Tooling Dependencies
 
-On macOS, Homebrew is installed in user-space. Because your OpenClaw account is a standard user, Homebrew installation and privileged commands should be bridged via the Admin account.
+On macOS, Homebrew is installed in user-space. Because `dfadmin` is a standard unprivileged user, Homebrew installation and binary writing are managed under the `youngjoo` user.
 
 ### 1. Install Homebrew
-- Log into your **Admin Account** and execute:
-  ```bash
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  ```
+Log into the **`youngjoo`** admin account and execute:
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
 
 ### 2. Install Required Tools
-Run the following Homebrew commands under the Homebrew-owning user account (`youngjoo`) to install essential OpenClaw dependency and automation tools:
+Run the following Homebrew commands under the Homebrew-owning user account (`youngjoo`) to install essential tools:
 ```bash
 brew install rclone gnu-tar jq gh
 ```
-*Note:*
-* macOS's default `tar` utility is BSD-based. OpenClaw backup scripts rely on **GNU Tar** (`gtar`) for advanced path exclusions.
-* The standard user will access these tools at `/opt/homebrew/bin/rclone`, `/opt/homebrew/bin/gtar`, and `/opt/homebrew/bin/gh`.
+* **GNU Tar (`gtar`)**: macOS's default `tar` utility is BSD-based. OpenClaw backup scripts rely on **GNU Tar** for advanced path exclusions.
+* **GitHub CLI (`gh`)**: Globally accessible under `/opt/homebrew/bin/gh` for managing repository snapshots.
 
 ---
 
-## Phase 2: Docker Desktop & Isolated Sandboxing
+## Phase 2: Bare-Metal Background Daemon (launchd) Setup
 
-On Apple Silicon Macs, Docker Desktop uses the highly optimized Apple Virtualization Framework which manages host memory dynamically. Since OpenClaw is extremely lightweight (< 300MB RAM), you can safely leave Docker resources at their defaults.
+Rather than running OpenClaw in a Docker container, we run it as a native macOS background LaunchAgent daemon under the `dfadmin` session.
 
-### 1. Install & Share Privileges
-1. Log into your **Admin Account**.
-2. Download and install [Docker Desktop for Mac (Apple Silicon)](https://www.docker.com/products/docker-desktop/).
-3. Launch it once as Admin to install its privileged helper (input admin password when prompted).
-4. In Docker Desktop Settings under **General**, ensure **"Allow the default Docker socket to be used"** is enabled. This allows standard users to run docker commands.
+### 1. Register the LaunchAgent Daemon
+Log into the **`dfadmin`** account and run the built-in installer to create, register, and bootstrap the `launchd` configuration:
+```bash
+openclaw gateway install --runtime node
+```
+This registers a LaunchAgent plist file at `/Users/dfadmin/Library/LaunchAgents/ai.openclaw.gateway.plist` configured to restart OpenClaw automatically if it crashes or the system boots.
 
-### 2. Configure Restricted File Sharing (The Air-Gap)
-By default, Docker Desktop shares the entire `/Users` and `/tmp` directories, which leaves the host vulnerable if the container is compromised.
-1. Open Docker Desktop -> **Settings > Resources > File sharing**.
-2. Delete the default paths (`/Users`, `/Volumes`, `/tmp`).
-3. Add **only** the absolute path to your standard user's OpenClaw data directory: `/Users/<standard-username>/.openclaw`.
-
-### 3. Launch Docker at Login
-1. Log into your restricted **Standard Account**.
-2. Open Docker Desktop.
-3. Open **System Settings > General > Login Items** on your Mac and add **Docker** to the list to ensure the daemon automatically spins up on user login.
+### 2. Manage the Service
+Use the following commands to control the background daemon under `dfadmin`:
+* **Start Gateway**: `openclaw gateway start`
+* **Stop Gateway**: `openclaw gateway stop`
+* **Check Service State**: `openclaw gateway status`
 
 ---
 
 ## Phase 3: Ollama Local AI Model Setup
 
-Ollama runs locally on the host's Apple Silicon GPU. We install and run it in user-space under the **Standard Account**, bypassing root requirements.
+Ollama runs locally on the host's Apple Silicon GPU. It is installed and run in user-space under the **`dfadmin`** account.
 
-### 1. Start Ollama with Container Accessibility
-Ollama must bind to `0.0.0.0` (all interfaces) rather than the default `127.0.0.1` so that the Docker container can communicate with the host's Ollama instance.
-
-Log into your **Standard Account** and run:
+### 1. Start Ollama
+Start Ollama under the `dfadmin` account:
 ```bash
 mkdir -p ~/.ollama
-OLLAMA_HOST=0.0.0.0 OLLAMA_FLASH_ATTENTION="1" OLLAMA_KV_CACHE_TYPE="q8_0" nohup /opt/homebrew/bin/ollama serve > ~/.ollama/ollama.log 2>&1 &
+OLLAMA_HOST=127.0.0.1 OLLAMA_FLASH_ATTENTION="1" OLLAMA_KV_CACHE_TYPE="q8_0" nohup /opt/homebrew/bin/ollama serve > ~/.ollama/ollama.log 2>&1 &
 ```
-*Optimizations:*
-* `OLLAMA_FLASH_ATTENTION="1"`: Dramatically speeds up token processing.
-* `OLLAMA_KV_CACHE_TYPE="q8_0"`: Uses 8-bit quantized caching, cutting host memory consumption in half while retaining model accuracy.
+* Note: Ollama is bound strictly to `127.0.0.1` (loopback only) since it is running on the same host as the OpenClaw service, eliminating any external network exposure.
+* `OLLAMA_FLASH_ATTENTION="1"`: Speeds up local model token generation.
+* `OLLAMA_KV_CACHE_TYPE="q8_0"`: Uses 8-bit quantized caching, cutting memory consumption in half.
 
 ### 2. Pull Local Models
-Download your primary model and optimized local fallback:
+Download the primary model and local fallback:
 ```bash
 /opt/homebrew/bin/ollama pull qwen3.5:9b
 /opt/homebrew/bin/ollama pull gemma4:e4b
 ```
 
-### 3. Verify Connection
-Check if Ollama is running and has loaded the models:
-```bash
-curl -s http://127.0.0.1:11434/api/tags
-```
-
 ---
 
-## Phase 4: OpenClaw Configurations & Mappings
+## Phase 4: Bare-Metal OpenClaw Configuration Mappings
 
-OpenClaw mounts its configuration files from `~/.openclaw/` on the Mac host into `/home/node/.openclaw/` inside the container. 
+The bare-metal setup reads all configuration parameters natively from macOS paths rather than mapped virtual container paths.
 
 ### 1. Local Shell Aliases (`~/.zshrc`)
-macOS uses `zsh` as its default shell. Log into your **Standard Account** and add these helper shortcuts to your `~/.zshrc`:
+Comment out the old container execution variable inside `/Users/dfadmin/.zshrc` to ensure the host CLI acts natively:
 ```bash
-cat >> ~/.zshrc << 'EOF'
+# Disabled for bare-metal migration. Uncomment to rollback to Docker.
+# export OPENCLAW_CONTAINER=openclaw-sandbox
 
-# OpenClaw shortcuts
-oc() { docker exec -it openclaw-sandbox openclaw "$@"; }
-alias oc-upgrade="docker pull ghcr.io/openclaw/openclaw:latest && docker stop openclaw-sandbox && docker rm openclaw-sandbox && docker run -d --name openclaw-sandbox --restart always --security-opt no-new-privileges:true -v ~/.openclaw:/home/node/.openclaw -e HOME=/home/node ghcr.io/openclaw/openclaw:latest"
-EOF
-source ~/.zshrc
+oc() { openclaw "$@"; }
 ```
 
 ### 2. Configuration: `openclaw.json` (`~/.openclaw/openclaw.json`)
-Configure your `openclaw.json` exactly as follows. This registers your local Ollama models, overrides context truncation, defines cloud fallbacks, and locks down bot settings.
-
-> [!IMPORTANT]
-> You **must** define `params.num_ctx` as `65536` (64k tokens) under Ollama. By default, Ollama cuts off API request context at `2048` tokens, which causes OpenClaw's memory context to truncate and leads to immediate agent failures on complex turns.
+Configure your `/Users/dfadmin/.openclaw/openclaw.json` exactly as follows. All paths are resolved to `/Users/dfadmin/` and network bindings are secured.
 
 ```json
 {
@@ -163,7 +140,7 @@ Configure your `openclaw.json` exactly as follows. This registers your local Oll
   "models": {
     "providers": {
       "ollama": {
-        "baseUrl": "http://host.docker.internal:11434",
+        "baseUrl": "http://127.0.0.1:11434",
         "apiKey": "ollama-local",
         "auth": "api-key",
         "api": "ollama",
@@ -199,39 +176,64 @@ Configure your `openclaw.json` exactly as follows. This registers your local Oll
         "ollama/gemma4:e4b": {
           "alias": "gemma4"
         },
-        "google/gemini-3.1-pro": {
+        "google/gemini-3.1-pro-preview": {
           "alias": "pro"
         },
         "google/gemini-3.5-flash": {
           "alias": "flash35"
         }
       },
-      "workspace": "/home/node/.openclaw/workspace",
+      "workspace": "/Users/dfadmin/.openclaw/workspace",
       "compaction": {
         "mode": "safeguard"
       },
       "heartbeat": {
         "every": "1h",
         "target": "telegram"
+      },
+      "contextPruning": {
+        "mode": "cache-ttl",
+        "ttl": "1h"
       }
     },
     "list": [
-      { "id": "main" }
+      {
+        "id": "main"
+      }
     ]
   },
   "tools": {
-    "profile": "coding"
+    "profile": "coding",
+    "web": {
+      "search": {
+        "provider": "gemini"
+      }
+    },
+    "exec": {
+      "host": "gateway",
+      "security": "allowlist",
+      "ask": "on-miss"
+    }
   },
   "commands": {
     "native": "auto",
     "nativeSkills": "auto",
-    "restart": true
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
+  "session": {
+    "dmScope": "per-channel-peer"
   },
   "channels": {
     "telegram": {
       "enabled": true,
       "dmPolicy": "pairing",
-      "groupPolicy": "pairing",
+      "groups": {
+        "*": {
+          "requireMention": true
+        }
+      },
+      "groupPolicy": "open",
       "streaming": {
         "mode": "partial"
       },
@@ -245,7 +247,15 @@ Configure your `openclaw.json` exactly as follows. This registers your local Oll
   "gateway": {
     "port": 18789,
     "mode": "local",
-    "bind": "all",
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      "token": "YOUR_GATEWAY_AUTH_TOKEN"
+    },
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    },
     "nodes": {
       "denyCommands": [
         "camera.snap",
@@ -274,13 +284,22 @@ Configure your `openclaw.json` exactly as follows. This registers your local Oll
       "telegram",
       "anthropic",
       "memory-core",
-      "ollama"
+      "ollama",
+      "active-memory"
     ],
     "entries": {
-      "google": { "enabled": true },
-      "telegram": { "enabled": true },
-      "anthropic": { "enabled": true },
-      "ollama": { "enabled": true },
+      "google": {
+        "enabled": true
+      },
+      "telegram": {
+        "enabled": true
+      },
+      "anthropic": {
+        "enabled": true
+      },
+      "ollama": {
+        "enabled": true
+      },
       "memory-core": {
         "enabled": true,
         "config": {
@@ -289,252 +308,126 @@ Configure your `openclaw.json` exactly as follows. This registers your local Oll
             "model": "flash35"
           }
         }
+      },
+      "active-memory": {
+        "enabled": true,
+        "config": {
+          "agents": [
+            "main"
+          ],
+          "allowedChatTypes": [
+            "direct"
+          ],
+          "modelFallback": "google/gemini-3-flash",
+          "queryMode": "recent",
+          "promptStyle": "balanced",
+          "timeoutMs": 15000,
+          "maxSummaryChars": 220,
+          "persistTranscripts": false,
+          "logging": true
+        }
       }
-    }
+    },
+    "bundledDiscovery": "compat"
   }
 }
 ```
 
-### 3. Config Runtime: `auth-profiles.json` (`~/.openclaw/agents/main/agent/auth-profiles.json`)
-Configure your keys under the `profiles` array. Make sure you map the `ollama:default` configuration with a dummy API key to authenticate local routing:
-```json
-{
-  "version": 1,
-  "profiles": {
-    "google:default": {
-      "type": "api_key",
-      "provider": "google",
-      "key": "YOUR_GEMINI_API_KEY"
-    },
-    "anthropic:default": {
-      "type": "api_key",
-      "provider": "anthropic",
-      "key": "YOUR_ANTHROPIC_API_KEY"
-    },
-    "ollama:default": {
-      "type": "api_key",
-      "provider": "ollama",
-      "key": "ollama-local"
-    }
-  },
-  "lastGood": {
-    "google": "google:default",
-    "anthropic": "anthropic:default",
-    "ollama": "ollama:default"
-  }
-}
-```
+---
 
-### 4. Boot Up the OpenClaw Container
-Spin up the main runtime container using the secure `latest` official image:
-```bash
-docker run -d \
-  --name openclaw-sandbox \
-  --restart always \
-  --security-opt no-new-privileges:true \
-  -v ~/.openclaw:/home/node/.openclaw \
-  -e HOME=/home/node \
-  ghcr.io/openclaw/openclaw:latest
-```
+## Phase 5: Advanced Security Hardening & Execution Policies
 
-### 5. Reconcile Configuration Schema
-Run the doctor fix utility inside the container to ensure all plugins align with the latest image schema changes:
+Because Docker is removed, OpenClaw has direct access to the host's standard user space. We lock down access using strict application-level controls:
+
+### 1. Loopback-Only Network Binding
+In `openclaw.json`, `"bind"` is set to `"loopback"`. This forces OpenClaw to bind strictly to localhost (`127.0.0.1`), physical blocking any other computer on your LAN or WiFi from hitting the local WebSocket Gateway port `18789`.
+
+### 2. Directory Permissions Lockdown
+Protect configurations, API keys, and memory DBs on the host:
 ```bash
-docker exec -it openclaw-sandbox openclaw doctor --fix
-docker restart openclaw-sandbox
+chmod 700 /Users/dfadmin/.openclaw
 ```
+This restricts read/write permissions exclusively to the `dfadmin` user.
+
+### 3. Cautious Shell Execution Policy
+OpenClaw enforces a human-in-the-loop validation process before executing *any* shell command or script:
+```bash
+openclaw exec-policy preset cautious
+```
+This configures `defaults.security` to `"allowlist"` and `defaults.ask` to `"on-miss"`. The agent **cannot** run shell tools directly. For every command execution, OpenClaw stops and sends an interactive verification request to your Telegram chat (`@JooJJBot`). It will only execute if you tap **Approve**.
+
+* **Socket Fix**: Ensure `/Users/dfadmin/.openclaw/exec-approvals.json` maps `"socket.path"` to `/Users/dfadmin/.openclaw/exec-approvals.sock` rather than container legacy paths.
 
 ---
 
-## Phase 5: VFS Mount EPERM Patch for Command Runner
+## Phase 6: Backup Schedules, Crontabs & Private Git Backup
 
-### The EPERM Blockage
-Because OpenClaw mounts `/Users/<standard-user>/.openclaw` from the macOS host directly to `/home/node/.openclaw` in the container, any internal Node call to `fs.chmodSync('/home/node/.openclaw', 448)` triggers a macOS Virtual File System (VFS) permissions block, returning an `EPERM (Operation not permitted)` error. Since OpenClaw performs this directory check every time the agent executes a shell command, **all agent command runs will fail by default.**
+Legacy automated snapshot backups were failing due to WSL2 path discrepancies (`/home/young/`). Both cron check scripts and active user crontabs have been fully repaired and corrected to macOS host paths.
 
-### The Hot-Patch
-To resolve this, we intercept the throwing `chmodSync` line in `/app/dist/exec-approvals-*.js` inside the container to gracefully bypass container-level mount permission blocks:
+### 1. Repaired Backup Verification Scripts
+All path variables have been corrected to `/Users/dfadmin/` in the script directory:
+* `/Users/dfadmin/openclaw-win/scripts/backup-check.sh`
+* `/Users/dfadmin/openclaw-win/scripts/antigravity-backup-check.sh`
 
-1. Create a script `/Users/<standard-user>/.openclaw/patch-docker-eperm.sh` on the host:
-   ```bash
-   cat << 'EOF' > ~/.openclaw/patch-docker-eperm.sh
-   #!/bin/bash
-   # A script to patch OpenClaw's EPERM chmod bug inside the docker container on macOS host.
-   
-   CONTAINER_NAME="openclaw-sandbox"
-   
-   echo "=== Checking if container \$CONTAINER_NAME is running... ==="
-   if ! /usr/local/bin/docker ps --format '{{.Names}}' | grep -q "^\${CONTAINER_NAME}$"; then
-     echo "Error: Container \$CONTAINER_NAME is not running. Please start it first."
-     exit 1
-   fi
-   
-   echo "=== Searching for the exec approvals javascript file... ==="
-   FILE=\$(/usr/local/bin/docker exec \$CONTAINER_NAME sh -c "grep -l 'Refusing to use unsafe exec approvals directory' /app/dist/*.js 2>/dev/null | head -n 1")
-   
-   if [ -z "\$FILE" ]; then
-     echo "Error: Could not locate the target javascript file inside the container."
-     exit 1
-   fi
-   
-   echo "Found file inside container: \$FILE"
-   
-   echo "=== Applying patch inside the container... ==="
-   /usr/local/bin/docker exec \$CONTAINER_NAME node -e "
-   const fs = require('fs');
-   const filePath = '\$FILE';
-   let content = fs.readFileSync(filePath, 'utf8');
-   const target = 'if (process.platform !== \\\"win32\\\") throw err;';
-   const replacement = 'if (process.platform !== \\\"win32\\\" && err.code !== \\\"EPERM\\\" && err.code !== \\\"EACCES\\\") throw err;';
-   if (content.includes(target)) {
-     content = content.replace(target, replacement);
-     fs.writeFileSync(filePath, content, 'utf8');
-     console.log('Successfully patched ' + filePath);
-   } else if (content.includes(replacement)) {
-     console.log('File is already patched.');
-   } else {
-     console.log('Error: Could not find target pattern in ' + filePath);
-     process.exit(1);
-   }
-   "
-   
-   if [ \$? -eq 0 ]; then
-     echo "=== Restarting the container to apply changes... ==="
-     /usr/local/bin/docker restart \$CONTAINER_NAME
-     echo "=== Done! OpenClaw successfully patched and restarted. ==="
-   else
-     echo "Error: Patch application failed."
-     exit 1
-   fi
-   EOF
-   chmod +x ~/.openclaw/patch-docker-eperm.sh
-   ```
-2. Execute the patch:
-   ```bash
-   ~/.openclaw/patch-docker-eperm.sh
-   ```
-*Note:* If you ever rebuild, upgrade, or recreate the container (e.g., pulling a new image), simply re-run this script on your host.
-
----
-
-## Phase 6: Backup Schedules & Host Cron Permissions
-
-### 1. Grant macOS Full Disk Access to `cron`
-macOS blocks the host `cron` daemon from reading directories like `Documents` or standard user Home directories. To prevent backups from failing with `Permission Denied` errors:
-1. Open **System Settings > Privacy & Security > Full Disk Access**.
-2. Click the `+` button and authenticate with your Admin credentials.
-3. Press `Cmd + Shift + G`, type `/usr/sbin/cron`, and select the `cron` binary.
-4. Ensure the toggle next to `cron` is turned **ON**.
-
-### 2. Configure Backup Script (`~/.openclaw/openclaw-backup.sh`)
-Create the backup script on the host to compress your configuration volume using GNU Tar (`gtar`) and back it up directly to Google Drive via `rclone`:
-
-```bash
-cat << 'EOF' > ~/.openclaw/openclaw-backup.sh
-#!/bin/bash
-# Backup OpenClaw settings and workspaces
-
-USER_HOME="/Users/youngjoo" # Update to standard user home directory
-BACKUP_DIR="${USER_HOME}/.openclaw"
-ARCHIVE="${USER_HOME}/openclaw-backup.tar.gz"
-
-# Compress configuration folders, excluding unnecessary log files
-/opt/homebrew/bin/gtar --exclude='*.log' --exclude='logs' --exclude='tmp' -czf "$ARCHIVE" -C "${USER_HOME}" .openclaw
-
-# Upload backup to Google Drive
-/opt/homebrew/bin/rclone copy "$ARCHIVE" agent-drive:openclaw-backups/snapshots/
-
-# Clean up local archive
-rm "$ARCHIVE"
-EOF
-chmod +x ~/.openclaw/openclaw-backup.sh
-```
-
-### 3. Load Backup Cron Job
-Open the user's crontab:
-```bash
-crontab -e
-```
-Add the daily execution line (e.g. daily at 3:00 AM):
+### 2. Active macOS Crontab Schedule
+Open the `dfadmin` crontab using `crontab -e` and confirm that it matches the corrected host-level schedules:
 ```cron
-0 3 * * * /Users/youngjoo/.openclaw/openclaw-backup.sh > /dev/null 2>&1
+# OpenClaw Snapshot Backups
+0 3 * * * /Users/dfadmin/openclaw-win/scripts/openclaw-backup.sh >> /Users/dfadmin/.openclaw/logs/openclaw-backup-cron.log 2>&1
+0 * * * * /Users/dfadmin/openclaw-win/scripts/backup-check.sh >> /Users/dfadmin/.openclaw/logs/openclaw-backup-check.log 2>&1
+
+# Antigravity Snapshot Backups
+15 3 * * * /Users/dfadmin/openclaw-win/scripts/antigravity-backup.sh >> /Users/dfadmin/.openclaw/logs/antigravity-backup-cron.log 2>&1
+15 * * * * /Users/dfadmin/openclaw-win/scripts/antigravity-backup-check.sh >> /Users/dfadmin/.openclaw/logs/antigravity-backup-check.log 2>&1
 ```
 
-### 4. Cron jobs.json Telegram Delivery Configuration
-When setting up automated in-agent tasks (like morning briefings or repository audits) in `~/.openclaw/cron/jobs.json`, **never** leave `"sessionTarget": "main"`. It will silently dump outputs to your internal webchat without delivering them to your devices.
-
-Ensure every cron job utilizes **isolated sessions** routed explicitly to your Telegram ID:
-```json
-{
-  "name": "daily-briefing",
-  "schedule": "0 8 * * *",
-  "sessionTarget": "isolated",
-  "delivery": {
-    "mode": "announce",
-    "channel": "telegram",
-    "to": "YOUR_TELEGRAM_CHAT_ID"
-  }
-}
-```
-
-### 5. Private Git Workspace Backup
-Because your agent workspace contains sensitive memories, custom skills, daily logs, and configuration maps, it should be backed up regularly to a **private** Git repository to prevent data loss.
-
-1. **Staging & Storing Workspace**: The workspace files are stored under `/Users/dfadmin/.openclaw/workspace`. We have initialized this as a Git repository, staged the active agent files (ignoring `.DS_Store` and other OS-level files), and committed the first revision.
-2. **Wiring a Remote**: Create a **private** repository on your preferred provider (GitHub/GitLab) without initializing it with a README.
-3. **Register and Push (Run on Mac Mini host)**:
+### 3. Private Git Workspace Backup
+Keep a persistent, encrypted Git history of your agent memories and custom skills:
+1. Navigate to the local workspace:
    ```bash
-   cd ~/.openclaw/workspace
-   git remote add origin <your-private-git-repo-url>
-   git push -u origin main
+   cd /Users/dfadmin/.openclaw/workspace
    ```
-4. **Subsequent Backups**: To back up memory files as your agent operates:
+2. Check Git status and stage files:
    ```bash
-   cd ~/.openclaw/workspace
+   git status
    git add .
-   git commit -m "Update memory logs"
-   git push
+   git commit -m "Snapshot backup: bare-metal transition"
+   ```
+3. Push to your private remote repository:
+   ```bash
+   git push origin main
    ```
 
 ---
 
-## Phase 7: Gotchas, Troubleshooting & Chaos Testing
+## Phase 7: Troubleshooting, Gotchas & Lossless Rollback Plan
 
-### 1. Resetting Auth Cooldowns
-If your API key fails or rate-limits repeatedly, OpenClaw places the profile into a hard `cooldown` state. This state **persists in process memory** across container restarts.
+### 1. Troubleshooting Tools
+Use native OpenClaw tools to inspect the active bare-metal daemon:
+* **Gateway Logs**: `tail -f ~/Library/Logs/openclaw/gateway.log`
+* **CLI Status**: `openclaw status` (runs natively on loopback)
+* **Model Test**: `openclaw model test ollama/qwen3.5:9b`
 
-To clear a locked auth profile:
-1. Stop the container fully: `docker stop openclaw-sandbox`.
-2. Open `~/.openclaw/agents/main/agent/auth-profiles.json`.
-3. Locate your failing provider under the `profiles` array. Find `usageStats` and reset the values:
-   ```json
-   "usageStats": {
-     "errorCount": 0,
-     "lastFailureAt": 0
-   }
+### 2. Loss-Free Rollback Procedure (Revert to Docker)
+If you ever need to return to running OpenClaw in a Docker container, we have preserved the original Docker-mapped configuration backup: `/Users/dfadmin/.openclaw/openclaw.json.bak.docker`.
+
+Follow these simple steps:
+1. **Stop & Uninstall the Bare-Metal Service**:
+   ```bash
+   openclaw gateway stop
+   openclaw gateway uninstall
    ```
-4. Start the container again: `docker start openclaw-sandbox`.
-
-### 2. Standard Restart Rules
-* `docker restart openclaw-sandbox` is fast and safely applies basic settings changes.
-* `docker stop openclaw-sandbox && docker start openclaw-sandbox` is **required** to clear in-memory auth cooldowns, rate limits, and provider state caches.
-
-### 3. File Ownership Mismatches
-Because Docker's daemon runs under root-level contexts, new directories created inside mounts can sometimes be clobbered with `root` ownership, resulting in `EACCES` errors. If files become unreadable by the standard host user, regain ownership:
-```bash
-sudo chown -R $(id -u):$(id -g) ~/.openclaw/
-```
-
-### 4. Host Verification & Testing Commands
-Always verify configurations using these commands:
-* Check all registered models and see which is default:
-  ```bash
-  oc models list
-  ```
-* Test if the local model responds properly:
-  ```bash
-  oc model test ollama/qwen3.5:9b
-  ```
-* Trigger a cron job manually (using its UUID) to test delivery configurations:
-  ```bash
-  oc cron run <job-uuid>
-  ```
+2. **Re-Enable old Container Shell Shortcuts**:
+   Open `/Users/dfadmin/.zshrc` and uncomment the container environment variable:
+   ```bash
+   export OPENCLAW_CONTAINER=openclaw-sandbox
+   ```
+3. **Revert Path Config Mapping**:
+   ```bash
+   cp /Users/dfadmin/.openclaw/openclaw.json.bak.docker /Users/dfadmin/.openclaw/openclaw.json
+   ```
+4. **Relaunch the Docker Sandbox Container**:
+   ```bash
+   docker start openclaw-sandbox
+   ```
+   All of your historical files, memories, and databases are preserved intact inside the `~/.openclaw` directory, and OpenClaw will resume containerized execution immediately.
