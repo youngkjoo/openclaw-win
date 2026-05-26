@@ -78,6 +78,21 @@ Use the following commands to control the background daemon under `dfadmin`:
 * **Stop Gateway**: `openclaw gateway stop`
 * **Check Service State**: `openclaw gateway status`
 
+### 3. Session Persistence & Architecture: LaunchAgent vs. LaunchDaemon
+Previously, running OpenClaw in a container required keeping the `dfadmin` account graphically logged in so that the Docker Desktop GUI and virtual machine remained running. Under this native bare-metal setup, a graphical login is no longer required.
+
+#### A. Keep `dfadmin` Logged In via Fast User Switching (Recommended)
+Because OpenClaw runs as a native background **LaunchAgent** under `dfadmin`'s session:
+* You do **not** need a graphical GUI window open. You can lock the screen, close all windows, or use **Fast User Switching** to log into the `youngjoo` admin account. 
+* As long as the `dfadmin` session remains loaded in the background (i.e., you do not explicitly select "Log Out dfadmin" from the Apple menu), OpenClaw will continue running natively 24/7 in the background with near-zero resource usage.
+
+#### B. Why We Do Not Use System-Level LaunchDaemons
+To have OpenClaw start up automatically at boot without *ever* logging in, it would need to be registered as a system-level **LaunchDaemon** at `/Library/LaunchDaemons/`. However, this introduces significant risks and downsides:
+1. **Privilege Escalation Risk (Root Access)**: LaunchDaemons run as `root` by default. If the configuration to restrict execution to `dfadmin` is ever omitted, modified, or corrupted, the agent will run with full superuser permissions. This violates our standard-user sandbox model.
+2. **Operational Overhead**: Plist files in `/Library/LaunchDaemons/` are owned by root. The standard `dfadmin` user would lose the ability to start, stop, or manage the service using user-level commands, requiring `sudo` or switching to `youngjoo` for basic troubleshooting.
+3. **Loss of GUI/WindowServer Context**: LaunchDaemons have zero access to the macOS graphical server. If the agent is ever programmed to run skills that automate GUI applications (like opening Apple Notes or Reminders), it will fail silently.
+4. **Environment Isolation**: LaunchDaemons do not inherit standard shell environments or `.zshrc` mappings, requiring every tool, environment variable, and path to be rigidly hardcoded.
+
 ---
 
 ## Phase 3: Ollama Local AI Model Setup
