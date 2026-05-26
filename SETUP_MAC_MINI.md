@@ -202,11 +202,15 @@ Configure your `openclaw.json` exactly as follows. This registers your local Oll
         },
         "google/gemini-3.1-pro": {
           "alias": "pro"
+        },
+        "google/gemini-3.5-flash": {
+          "alias": "flash35"
         }
       },
       "workspace": "/home/node/.openclaw/workspace",
       "compaction": {
-        "mode": "safeguard"
+        "mode": "safeguard",
+        "model": "flash35"
       },
       "heartbeat": {
         "every": "1h",
