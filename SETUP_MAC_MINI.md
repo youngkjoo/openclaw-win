@@ -182,6 +182,10 @@ Configure your `/Users/dfadmin/.openclaw/openclaw.json` exactly as follows. All 
 > * **Bare Metal (Active)**: In `models.providers.ollama.baseUrl`, you **must** use `"http://127.0.0.1:11434"`. This routes local LLM queries directly via your host's native loopback port.
 > * **Docker (Legacy/Rollback)**: The container used `"http://host.docker.internal:11434"`. Using `host.docker.internal` on bare metal will fail immediately with `getaddrinfo ENOTFOUND host.docker.internal` because it is a virtual hostname that only exists inside Docker's network bridge.
 
+> [!WARNING]
+> **Legacy Path Pollution (`/home/node`)**:
+> Transitioning to bare metal requires a complete sweep of all internal state databases. Stale container paths (`/home/node/.openclaw/...`) inside active session pointer files (`*.trajectory-path.json`), `cron/jobs.json`, and `plugins/installs.json` will cause the gateway to fail during execution with silent `ENOENT` directory creation errors. Follow the path sweep commands in Phase 7 to guarantee a clean state.
+
 ```json
 {
   "auth": {
@@ -495,3 +499,35 @@ Follow these simple steps:
    docker start openclaw-sandbox
    ```
    All of your historical files, memories, and databases are preserved intact inside the `~/.openclaw` directory, and OpenClaw will resume containerized execution immediately.
+
+### 3. Stale Container Paths Gotcha (`/home/node`)
+If the Telegram bot stays stuck in a `...typing` state or hangs indefinitely, the gateway is likely encountering a silent directory creation exception:
+```
+ENOENT: no such file or directory, mkdir '/home/node'
+```
+Even after updating `openclaw.json`, legacy Docker path references (`/home/node`) can remain hardcoded inside active runtime database records. 
+
+To completely sweep the filesystem and align all state files with your standard macOS user directory (`/Users/dfadmin`):
+
+1. **Re-align Session Trajectory Pointers**:
+   ```bash
+   find /Users/dfadmin/.openclaw/agents/main/sessions/ -name "*.trajectory-path.json" -exec sed -i '' 's|/home/node|/Users/dfadmin|g' {} +
+   ```
+2. **Re-align Scheduled Cron Tasks**:
+   ```bash
+   sed -i '' 's|/home/node|/Users/dfadmin|g' /Users/dfadmin/.openclaw/cron/jobs.json
+   ```
+3. **Re-align Plugin Registries**:
+   ```bash
+   sed -i '' 's|/home/node|/Users/dfadmin|g' /Users/dfadmin/.openclaw/plugins/installs.json
+   ```
+4. **Clean Session Locks & Refresh Integrities**:
+   Run the CLI doctor utility to purge hung locks and refresh state parameters:
+   ```bash
+   openclaw doctor --fix
+   ```
+5. **Recycle the Gateway Service**:
+   ```bash
+   openclaw gateway stop
+   openclaw gateway start
+   ```
