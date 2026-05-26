@@ -208,7 +208,7 @@ Configure your `/Users/dfadmin/.openclaw/openclaw.json` exactly as follows. All 
         "auth": "api-key",
         "api": "ollama",
         "params": {
-          "num_ctx": 65536
+          "num_ctx": 32768
         }
       }
     }
@@ -257,7 +257,8 @@ Configure your `/Users/dfadmin/.openclaw/openclaw.json` exactly as follows. All 
       "contextPruning": {
         "mode": "cache-ttl",
         "ttl": "1h"
-      }
+      },
+      "contextTokens": 32000
     },
     "list": [
       {
