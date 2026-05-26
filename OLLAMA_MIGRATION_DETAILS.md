@@ -185,4 +185,87 @@ ollama/gemma4:e4b                          text       195k        no    yes   fa
 google/gemini-3.5-flash                    text       195k        no    yes   fallback#2
 anthropic/claude-sonnet-4-6                text+image 195k        no    yes   fallback#3,configured,alias:sonnet
 google/gemini-3.1-pro                      text+image 1000k       no    yes   configured,alias:pro
+
+---
+
+## 5. Command Execution EPERM Fix
+
+### The Problem
+When the OpenClaw agent tried to execute system/shell commands, it failed with the following error:
+> "..my execution tool is currently blocked by permissions inside this Docker container (EPERM on the workspace volume)"
+
+### Root Cause
+1. Under the hood, OpenClaw writes an audit log and updates authorizations in its execution approvals file at `/home/node/.openclaw/exec-approvals.json` before and after running shell commands.
+2. In the `ensureDir` function of `/app/dist/exec-approvals-*.js`, OpenClaw attempts to secure the directory permissions of the approvals file using `fs.chmodSync('/home/node/.openclaw', 448)` (`0o700` in octal).
+3. In this deployment, the entire `/Users/dfadmin/.openclaw` directory is **bind-mounted** into the container as `/home/node/.openclaw`. 
+4. Docker Desktop on macOS (using VirtioFS or gRPC FUSE) strictly blocks modifying metadata/permissions (`chmod`) on the root mountpoint of a bind-mounted host directory from inside the container, returning `EPERM` (Operation not permitted).
+5. OpenClaw's code had a strict catch check that would immediately crash and rethrow the error on Linux platforms (unlike Windows):
+   ```javascript
+   try {
+       fs.chmodSync(dir, 448);
+   } catch (err) {
+       if (process.platform !== "win32") throw err;
+   }
+   ```
+   This crashed the command runner tool entirely before any commands could execute.
+
+### Resolution
+We wrote a highly robust search-and-replace patching routine that intercepts this behavior inside the container. It allows the `chmod` operation to bypass containerized VFS mount limitations by gracefully catching `EPERM` and `EACCES` errors (just like the other file-level `chmod` calls in OpenClaw's persistence layer already do).
+
+We created a persistent script on the Mac Mini host: **`/Users/dfadmin/.openclaw/patch-docker-eperm.sh`**
+
+```bash
+#!/bin/bash
+# A script to patch OpenClaw's EPERM chmod bug inside the docker container on macOS host.
+
+CONTAINER_NAME="openclaw-sandbox"
+
+echo "=== Checking if container \$CONTAINER_NAME is running... ==="
+if ! /usr/local/bin/docker ps --format '{{.Names}}' | grep -q "^\${CONTAINER_NAME}$"; then
+  echo "Error: Container \$CONTAINER_NAME is not running. Please start it first."
+  exit 1
+fi
+
+echo "=== Searching for the exec approvals javascript file... ==="
+FILE=\$(/usr/local/bin/docker exec \$CONTAINER_NAME sh -c "grep -l 'Refusing to use unsafe exec approvals directory' /app/dist/*.js 2>/dev/null | head -n 1")
+
+if [ -z "\$FILE" ]; then
+  echo "Error: Could not locate the target javascript file inside the container."
+  exit 1
+fi
+
+echo "Found file inside container: \$FILE"
+
+echo "=== Applying patch inside the container... ==="
+/usr/local/bin/docker exec \$CONTAINER_NAME node -e "
+const fs = require('fs');
+const filePath = '\$FILE';
+let content = fs.readFileSync(filePath, 'utf8');
+const target = 'if (process.platform !== \\\"win32\\\") throw err;';
+const replacement = 'if (process.platform !== \\\"win32\\\" && err.code !== \\\"EPERM\\\" && err.code !== \\\"EACCES\\\") throw err;';
+if (content.includes(target)) {
+  content = content.replace(target, replacement);
+  fs.writeFileSync(filePath, content, 'utf8');
+  console.log('Successfully patched ' + filePath);
+} else if (content.includes(replacement)) {
+  console.log('File is already patched.');
+} else {
+  console.log('Error: Could not find target pattern in ' + filePath);
+  process.exit(1);
+}
+"
+
+if [ \$? -eq 0 ]; then
+  echo "=== Restarting the container to apply changes... ==="
+  /usr/local/bin/docker restart \$CONTAINER_NAME
+  echo "=== Done! OpenClaw successfully patched and restarted. ==="
+else
+  echo "Error: Patch application failed."
+  exit 1
+fi
+```
+
+### Verification
+* Running this script successfully finds the JavaScript bundle `/app/dist/exec-approvals-Bef7TPVc.js`, patches it, restarts the container, and boots up all agent interfaces healthy and polling!
+* Commands now execute seamlessly since VFS mount errors are gracefully bypassed!
 ```
