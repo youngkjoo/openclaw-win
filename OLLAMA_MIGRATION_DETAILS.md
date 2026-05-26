@@ -37,9 +37,11 @@ Ollama was installed in **user-space** under the `youngjoo` account, completely 
    mkdir -p ~/.ollama
    OLLAMA_HOST=0.0.0.0 OLLAMA_FLASH_ATTENTION="1" OLLAMA_KV_CACHE_TYPE="q8_0" nohup /opt/homebrew/bin/ollama serve > ~/.ollama/ollama.log 2>&1 &
    ```
-3. **Download Model**:
+3. **Download Models**:
+   We pulled the primary model (Qwen 3.5 9B) and the optimized local fallback model (Gemma 4 e4b):
    ```bash
    ollama pull qwen3.5:9b
+   ollama pull gemma4:e4b
    ```
 
 ---
@@ -91,6 +93,7 @@ Key adjustments applied:
       "model": {
         "primary": "ollama/qwen3.5:9b",
         "fallbacks": [
+          "ollama/gemma4:e4b",
           "google/gemini-3.5-flash",
           "anthropic/claude-sonnet-4-6"
         ]
@@ -99,6 +102,9 @@ Key adjustments applied:
         // ... existing models ...
         "ollama/qwen3.5:9b": {
           "alias": "qwen"
+        },
+        "ollama/gemma4:e4b": {
+          "alias": "gemma4"
         }
       }
     }
@@ -172,6 +178,7 @@ docker restart openclaw-sandbox
 ```
 Model                                      Input      Ctx         Local Auth  Tags
 ollama/qwen3.5:9b                          text       195k        no    yes   default,configured,alias:qwen
-google/gemini-3.5-flash                    text       195k        no    yes   fallback#1
-anthropic/claude-sonnet-4-6                text+image 195k        no    yes   fallback#2,configured,alias:sonnet
+ollama/gemma4:e4b                          text       195k        no    yes   fallback#1,configured,alias:gemma4
+google/gemini-3.5-flash                    text       195k        no    yes   fallback#2
+anthropic/claude-sonnet-4-6                text+image 195k        no    yes   fallback#3,configured,alias:sonnet
 ```
