@@ -12,8 +12,7 @@ This guide serves as a single, comprehensive, step-by-step instruction manual to
 5. [Phase 4: OpenClaw Configurations & Mappings](#phase-4-openclaw-configurations--mappings)
 6. [Phase 5: VFS Mount EPERM Patch for Command Runner](#phase-5-vfs-mount-eperm-patch-for-command-runner)
 7. [Phase 6: Backup Schedules & Host Cron Permissions](#phase-6-backup-schedules--host-cron-permissions)
-8. [Phase 7: Multi-Agent bot Bindings (Telegram Groups)](#phase-7-multi-agent-bot-bindings-telegram-groups)
-9. [Phase 8: Gotchas, Troubleshooting & Chaos Testing](#phase-8-gotchas-troubleshooting--chaos-testing)
+8. [Phase 7: Gotchas, Troubleshooting & Chaos Testing](#phase-7-gotchas-troubleshooting--chaos-testing)
 
 ---
 
@@ -479,54 +478,7 @@ Ensure every cron job utilizes **isolated sessions** routed explicitly to your T
 
 ---
 
-## Phase 7: Multi-Agent bot Bindings (Telegram Groups)
-
-You can run multiple isolated agents (e.g. a `main` agent and a `sysadmin` agent) that cooperate inside the same Telegram group.
-
-### Current Mappings
-
-| Agent ID | Telegram Bot | Role | Heartbeat | Fallback |
-|---|---|---|---|---|
-| `main` | `@JooJJBot` | Primary general developer agent | 1 hour | `ollama/gemma4:e4b` |
-| `sysadmin` | `@DF_Sysop_Bot` | System admin and status monitor | disabled | none |
-
-### Binding Steps
-1. Create bots with BotFather and fetch tokens.
-2. In `openclaw.json`, register the secondary account and bind it to a new agent under `agents.list`:
-   ```json
-   "channels": {
-     "telegram": {
-       "accounts": {
-         "default": { "botToken": "TOKEN_MAIN" },
-         "sysadmin": { "botToken": "TOKEN_SYSADMIN" }
-       }
-     }
-   },
-   "agents": {
-     "list": [
-       { "id": "main" },
-       { "id": "sysadmin" }
-     ]
-   },
-   "bindings": [
-     { "type": "route", "agentId": "main", "match": { "channel": "telegram", "accountId": "default" } },
-     { "type": "route", "agentId": "sysadmin", "match": { "channel": "telegram", "accountId": "sysadmin" } }
-   ]
-   ```
-3. Restart the container:
-   ```bash
-   docker restart openclaw-sandbox
-   ```
-4. Pair each bot: DM each bot via Telegram, copy the pairing code they send back, and approve them on the host machine:
-   ```bash
-   oc pairing approve telegram <MAIN_CODE>
-   oc pairing approve telegram <SYSADMIN_CODE>
-   ```
-5. **Group Collaboration**: Create a Telegram group, invite both bots, make them both **administrators** (so they can see mentions), and enable `"requireMention": true` in `openclaw.json` under `channels.telegram` so they only respond when explicitly `@`-mentioned.
-
----
-
-## Phase 8: Gotchas, Troubleshooting & Chaos Testing
+## Phase 7: Gotchas, Troubleshooting & Chaos Testing
 
 ### 1. Resetting Auth Cooldowns
 If your API key fails or rate-limits repeatedly, OpenClaw places the profile into a hard `cooldown` state. This state **persists in process memory** across container restarts.
