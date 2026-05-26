@@ -209,8 +209,7 @@ Configure your `openclaw.json` exactly as follows. This registers your local Oll
       },
       "workspace": "/home/node/.openclaw/workspace",
       "compaction": {
-        "mode": "safeguard",
-        "model": "flash35"
+        "mode": "safeguard"
       },
       "heartbeat": {
         "every": "1h",
@@ -282,7 +281,16 @@ Configure your `openclaw.json` exactly as follows. This registers your local Oll
       "google": { "enabled": true },
       "telegram": { "enabled": true },
       "anthropic": { "enabled": true },
-      "ollama": { "enabled": true }
+      "ollama": { "enabled": true },
+      "memory-core": {
+        "enabled": true,
+        "config": {
+          "dreaming": {
+            "enabled": true,
+            "model": "flash35"
+          }
+        }
+      }
     }
   }
 }
