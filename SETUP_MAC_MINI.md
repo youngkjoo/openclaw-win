@@ -13,6 +13,7 @@ This guide serves as a single, comprehensive, step-by-step instruction manual to
 6. [Phase 5: Advanced Security Hardening & Execution Policies](#phase-5-advanced-security-hardening--execution-policies)
 7. [Phase 6: Backup Schedules, Crontabs & Private Git Backup](#phase-6-backup-schedules-crontabs--private-git-backup)
 8. [Phase 7: Troubleshooting, Gotchas & Lossless Rollback Plan](#phase-7-troubleshooting-gotchas--lossless-rollback-plan)
+9. [Phase 8: Dual-Agent Architecture & Advanced Memory Config](#phase-8-dual-agent-architecture--advanced-memory-config)
 
 ---
 
@@ -532,3 +533,43 @@ To completely sweep the filesystem and align all state files with your standard 
    openclaw gateway stop
    openclaw gateway start
    ```
+
+---
+
+## Phase 8: Dual-Agent Architecture & Advanced Memory Config
+
+To keep standard chat interactions fast while isolating complex, long-running coding tasks, we have implemented a Dual-Agent Architecture.
+
+### 1. Dual-Agent Model Assignments
+We configured two distinct Telegram bots, routing to two specialized OpenClaw agents:
+* **Main Agent (`@JooJJBot`)**: Handles standard queries and chat. 
+  * **Primary Model**: `ollama/qwen3.5:9b` (Fast, localized privacy)
+  * **Fallback Model**: `ollama/gemma4:e4b`
+  * **Workspace**: `/Users/dfadmin/.openclaw/workspace`
+* **Heavy Agent (`@DFHeavyAgent_bot`)**: Isolated agent for complex task execution and internet routing.
+  * **Primary Model**: `google/gemini-3.5-flash`
+  * **Fallback Model**: `anthropic/claude-sonnet-4-6`
+  * **Workspace**: `/Users/dfadmin/.openclaw/workspace_heavy` (Completely sandboxed from the main workspace).
+
+### 2. Active Memory Subsystem & QMD Vector Search
+The `active-memory` subsystem persistently summarizes and stores key facts across conversations so the bots seamlessly remember your context.
+* It has been explicitly enabled for **both** the `"main"` and `"heavy"` agents in `openclaw.json`.
+* **allowedChatTypes**: Restricted to `"direct"` 1-on-1 chats to avoid bloating memory caches if the bot is added to noisy group channels.
+* **Model Fallback**: Uses a lightweight model (`google/gemini-3-flash`) purely as a background worker to summarize and index memories while you chat.
+
+To further augment the limited 32k context windows of your local `qwen` and `gemma` models, we installed **QMD (Quantized Memory Database)** as a completely local vector search sidecar:
+* **Installation**: Installed via npm globally (`npm install -g @tobilu/qmd`).
+* **Configuration**: Added to the root `memory` object in `openclaw.json` with session indexing explicitly enabled (`"sessions": { "enabled": true }`).
+* **Why QMD over Honcho?**: QMD runs 100% locally on your Mac Mini, downloading its own GGUF embedding models. It preserves the strict privacy of your bare-metal Ollama architecture, whereas Honcho would upload memory profiles to a cloud API.
+
+### 3. Fixing the "Context Overflow" & Compaction Safeguard Bug
+When running complex agents with large system prompts and tool schemas (like the `"coding"` profile), you must be very careful with OpenClaw's context and compaction budget logic.
+
+* **The Problem**: Previously, complex tasks were throwing "Context overflow" errors. To fix this, `compaction.reserveTokensFloor` was increased to `20000` to leave plenty of room for long task outputs. However, `contextTokens` was globally hardcoded to `32000` (Ollama's local limit). 
+  * OpenClaw Math: `32000 (total context) - 20000 (reserve) = 12000 tokens available for input`.
+  * Because system prompts + tool schemas consumed around 13,000 tokens, the agent triggered a **compaction-safeguard**, which aggressively deleted the user's message to fit within the 12k budget. The API received an empty prompt and immediately aborted with: `⚠️ Agent couldn't generate a response. Please try again.`
+
+* **The Solution**: 
+  * We increased the global `agents.defaults.contextTokens` to `195000` (the ceiling for Gemini). 
+  * This allows the mathematical context budget to cleanly swallow the 20,000 token reserve floor, ensuring that both local Ollama models and cloud Gemini models have immense amounts of safe headroom for user inputs without triggering destructive compaction safeguards.
+  * *Note: If a model runtime is stuck holding onto an old configuration after hot-reloads, you can force it to adopt the newest model by sending `/model <alias>` directly in the Telegram chat (e.g., `/model flash35`).*

@@ -17,12 +17,13 @@ export PATH="/opt/homebrew/bin:/usr/bin:/usr/local/bin:$PATH"
 echo "--- Backup started at $(date) ---" > "$LOG_FILE"
 
 # 1. Create the archive
-# Excluding config.json for security and .cache/npm if it exists
+# Excluding config.json for security, .cache/npm if it exists, and massive QMD GGUF models
 echo "Creating archive: $BACKUP_FILE" >> "$LOG_FILE"
 /opt/homebrew/bin/gtar -czf "$BACKUP_FILE" \
     --exclude='config.json' \
     --exclude='node_modules' \
     --exclude='.npm' \
+    --exclude='*.gguf' \
     --transform 's,^\.openclaw,openclaw-backup,' \
     -C /Users/dfadmin .openclaw 2>> "$LOG_FILE"
 
