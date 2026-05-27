@@ -14,6 +14,8 @@ This guide serves as a single, comprehensive, step-by-step instruction manual to
 7. [Phase 6: Backup Schedules, Crontabs & Private Git Backup](#phase-6-backup-schedules-crontabs--private-git-backup)
 8. [Phase 7: Troubleshooting, Gotchas & Lossless Rollback Plan](#phase-7-troubleshooting-gotchas--lossless-rollback-plan)
 9. [Phase 8: Dual-Agent Architecture & Advanced Memory Config](#phase-8-dual-agent-architecture--advanced-memory-config)
+10. [Phase 9: Hybrid Sandbox Email & Calendar Architecture](#phase-9-hybrid-sandbox-email--calendar-architecture)
+
 
 ---
 
@@ -573,3 +575,95 @@ When running complex agents with large system prompts and tool schemas (like the
   * We increased the global `agents.defaults.contextTokens` to `195000` (the ceiling for Gemini). 
   * This allows the mathematical context budget to cleanly swallow the 20,000 token reserve floor, ensuring that both local Ollama models and cloud Gemini models have immense amounts of safe headroom for user inputs without triggering destructive compaction safeguards.
   * *Note: If a model runtime is stuck holding onto an old configuration after hot-reloads, you can force it to adopt the newest model by sending `/model <alias>` directly in the Telegram chat (e.g., `/model flash35`).*
+
+---
+
+## Phase 9: Hybrid Sandbox Email & Calendar Architecture
+
+To allow the OpenClaw agent to track appointments, estimates (e.g., kitchen remodeling), purchases, and receipts, while maintaining strict personal security and optimal context token usage, we implement a **Hybrid Sandbox Email & Calendar Architecture**.
+
+### 1. Architectural Blueprint
+
+```mermaid
+graph TD
+    PersonalGmail["User's Personal Gmail"] -->|"1. Setup Auto-Forwarding Filters"| AgentMail["AgentMail: your-agent@agentmail.to"]
+    AgentMail -->|"2. Inbound Webhook / WebSocket JSON"| OpenClaw["OpenClaw Agent on Mac Mini"]
+    OpenClaw -->|"3. Output / Scheduling"| AgentGoogle["Agent Dedicated Google Account"]
+    AgentGoogle -->|"Calendar & Drive Shared Folders"| PersonalGmail
+```
+
+### 2. Core Security & Technical Rationales
+* **Sandbox Isolation (Gmail)**: The agent is never granted OAuth or App Password access to the user's personal Gmail account. This protects the user's identity, password resets, and highly sensitive personal communications from potential prompt-injection exploits.
+* **Dedicated Google Account (Calendar/Drive)**: The agent has its own dedicated standard Google Account (`agent-account@gmail.com`).
+  * The agent writes events and files directly to its own Google Calendar and Google Drive.
+  * The user shares the agent's specific calendar and selected Google Drive folders with their personal Google account, establishing a read/write window without compromising the user's main personal storage.
+* **AgentMail for Parsing & Real-Time Ingress**:
+  * **No IMAP Polling Lag**: Unlike polling Gmail via IMAP every few minutes, AgentMail pushes incoming emails instantly via real-time webhooks or WebSocket notifications.
+  * **Pre-Parsed Structured JSON**: Standard emails are packed with complex HTML, inline styles, trackers, and metadata that waste thousands of LLM context tokens. AgentMail pre-parses incoming emails, extracting clean text, metadata, and attachments into clean, structured JSON payloads. This decreases LLM token usage and latency.
+
+### 3. Step-by-Step Configuration Instructions
+
+#### A. Set Up Gmail Forwarding Filters (Personal Gmail)
+Rather than forwarding all emails, create highly targeted forwarding rules in your **personal Gmail settings** to your unique AgentMail address (e.g., `your-agent@agentmail.to`):
+1. **Kitchen Remodeling Estimates**: 
+   * *Filter Rule*: `Subject:("estimate" OR "proposal" OR "quote") AND ("kitchen" OR "remodel")`
+   * *Action*: Forward to `your-agent@agentmail.to`
+2. **Medical/KP.org Emails (Parents)**: 
+   * *Filter Rule*: `from:kp.org OR from:kp.org-alerts OR "Kaiser Permanente"`
+   * *Action*: Forward to `your-agent@agentmail.to`
+3. **Receipts & Purchases**: 
+   * *Filter Rule*: `Subject:("receipt" OR "invoice" OR "order confirmation" OR "your purchase")`
+   * *Action*: Forward to `your-agent@agentmail.to`
+
+#### B. Configure Dedicated Agent Google Account Sharing
+1. Log into the **dedicated agent Google Account**.
+2. **Google Calendar**: 
+   * Go to Google Calendar Settings > Settings for my calendars.
+   * Click **Share with specific people or groups** and add your **personal Google email**.
+   * Set permissions to **"Make changes and manage sharing"** or **"Make changes to events"**.
+   * Add this shared calendar to your personal Google Calendar view so you see agent-created appointments in real time.
+3. **Google Drive**:
+   * Create a folder named `Agent Vault` (or similar) in the agent's Google Drive.
+   * Right-click the folder, select **Share**, and add your **personal Google email** with **Editor** permissions.
+   * Now, any document, invoice, or PDF the agent saves to this folder is immediately accessible in your personal Google Drive under "Shared with me".
+
+#### C. Enable AgentMail Integration in OpenClaw
+OpenClaw listens to inbound email streams using the AgentMail integration. 
+
+1. Install the `agentmail` plugin/skill:
+   ```bash
+   npx clawhub@latest install agentmail
+   ```
+2. Apply your AgentMail credentials securely. Using `openclaw secrets` prevents plaintext storage of API tokens in `openclaw.json`:
+   ```bash
+   openclaw secrets set AGENTMAIL_API_KEY "am_key_..."
+   openclaw secrets set AGENTMAIL_INBOX_ID "your-agent-inbox-uuid"
+   ```
+3. Update `openclaw.json` to enable the AgentMail entry under `plugins`:
+   ```json
+   "plugins": {
+     "allow": [
+       ...
+       "agentmail"
+     ],
+     "entries": {
+       ...
+       "agentmail": {
+         "enabled": true,
+         "config": {
+           "inboxId": "your-agent-inbox-uuid",
+           "autoProcess": true,
+           "forwarding": {
+             "calendarEnabled": true,
+             "driveEnabled": true
+           }
+         }
+       }
+     }
+   }
+   ```
+4. Recycle the Gateway service:
+   ```bash
+   openclaw gateway stop
+   openclaw gateway start
+   ```
