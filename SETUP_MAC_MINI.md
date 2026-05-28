@@ -417,9 +417,9 @@ In `openclaw.json`, `"bind"` is set to `"loopback"`. This forces OpenClaw to bin
 ### 2. Directory Permissions Lockdown
 Protect configurations, API keys, and memory DBs on the host:
 ```bash
-chmod 700 /Users/dfadmin/.openclaw
+chmod -R u=rwX,go= /Users/dfadmin/.openclaw
 ```
-This restricts read/write permissions exclusively to the `dfadmin` user.
+This recursively restricts read, write, and execute permissions exclusively to the `dfadmin` user, revoking all access from any other user accounts on the Mac Mini.
 
 ### 3. Cautious Shell Execution Policy
 OpenClaw enforces a human-in-the-loop validation process before executing *any* shell command or script:
