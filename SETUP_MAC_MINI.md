@@ -223,7 +223,7 @@ Configure your `/Users/dfadmin/.openclaw/openclaw.json` exactly as follows. All 
   "agents": {
     "defaults": {
       "model": {
-        "primary": "ollama/gemma4:12b",
+        "primary": "ollama/gemma4:12b-it-qat",
         "fallbacks": [
           "ollama/qwen3.5:9b",
           "google/gemini-3.5-flash",
@@ -239,6 +239,9 @@ Configure your `/Users/dfadmin/.openclaw/openclaw.json` exactly as follows. All 
           "params": {
             "cacheRetention": "short"
           }
+        },
+        "ollama/gemma4:12b-it-qat": {
+          "alias": "gemma4-12b-qat"
         },
         "ollama/gemma4:12b": {
           "alias": "gemma4-12b"
@@ -548,7 +551,7 @@ To keep standard chat interactions fast while isolating complex, long-running co
 ### 1. Dual-Agent Model Assignments
 We configured two distinct Telegram bots, routing to two specialized OpenClaw agents:
 * **Main Agent (`@JooJJBot`)**: Handles standard queries and chat. 
-  * **Primary Model**: `ollama/gemma4:12b` (Unified multimodal reasoning)
+  * **Primary Model**: `ollama/gemma4:12b-it-qat` (Unified QAT reasoning)
   * **Fallback Model**: `ollama/qwen3.5:9b`
   * **Workspace**: `/Users/dfadmin/.openclaw/workspace`
 * **Heavy Agent (`@DFHeavyAgent_bot`)**: Isolated agent for complex task execution and internet routing.
