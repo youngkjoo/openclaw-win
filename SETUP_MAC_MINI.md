@@ -569,6 +569,7 @@ To further augment the limited 32k context windows of your local `qwen` and `gem
 * **Installation**: Installed via npm globally (`npm install -g @tobilu/qmd`).
 * **Configuration**: Added to the root `memory` object in `openclaw.json` with session indexing explicitly enabled (`"sessions": { "enabled": true }`).
 * **Why QMD over Honcho?**: QMD runs 100% locally on your Mac Mini, downloading its own GGUF embedding models. It preserves the strict privacy of your bare-metal Ollama architecture, whereas Honcho would upload memory profiles to a cloud API.
+* **Optimization & Execution Plan**: For detailed execution instructions on configuring QMD embedding isolation and constraining memory limits, refer to the [OpenClaw Optimization Plan](openclaw_optimization_plan.md).
 
 ### 3. Fixing the "Context Overflow" & Compaction Safeguard Bug
 When running complex agents with large system prompts and tool schemas (like the `"coding"` profile), you must be very careful with OpenClaw's context and compaction budget logic.
