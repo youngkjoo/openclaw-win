@@ -27,7 +27,6 @@ ollama pull nomic-embed-text
 FROM gemma4:12b-it-qat
 PARAMETER num_ctx 8192
 PARAMETER temperature 0.0
-PARAMETER num_gpu 1
 PARAMETER stop "<end_of_turn>"
 ```
 2. Build the new constrained model alias:
